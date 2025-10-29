@@ -1,0 +1,184 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging" || $CI_COMMIT_BRANCH == "main"'
+stages:
+  - build
+  - deployVnStaging
+  - deployInStaging
+  - deployVnProduction
+  - deployInProduction
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_REGISTRY: 358768096154.dkr.ecr.ap-southeast-1.amazonaws.com
+  AWS_DEFAULT_REGION: ap-southeast-1
+  APP_NAME: logistic
+  DOCKER_HOST: tcp://docker:2375
+
+.docker:
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - apk add --no-cache curl jq python3 py3-pip
+    - pip install awscli --break-system-packages
+    - aws ecr get-login-password | docker login --username AWS --password-stdin $DOCKER_REGISTRY
+
+.kubernetes:
+  image: registry.gitlab.com/gitlab-org/cluster-integration/helm-install-image/releases/3.6.1-kube-1.17.17-alpine-3.12
+  before_script:
+    - apk add gettext libintl
+
+build:
+  extends: .docker
+  stage: build
+  script:
+    - docker pull "$DOCKER_REGISTRY/$APP_NAME:latest" || true
+    - docker build
+      --cache-from "$DOCKER_REGISTRY/$APP_NAME:latest"
+      --tag "$DOCKER_REGISTRY/$APP_NAME:$CI_COMMIT_SHA"
+      --tag "$DOCKER_REGISTRY/$APP_NAME"
+      --file Application.Dockerfile
+      --build-arg IS_GEN_SWAGGER=true
+      .
+    - docker push "$DOCKER_REGISTRY/$APP_NAME"
+    - docker push "$DOCKER_REGISTRY/$APP_NAME:$CI_COMMIT_SHA"
+#deploydb:
+#  extends: .kubernetes
+#  stage: deployDB
+#  script:
+#    - helm repo add bitnami https://charts.bitnami.com/bitnami
+#    - helm upgrade --install sentinel bitnami/redis --values .gitlab/helm/redis-values.yaml
+#    - helm upgrade --install db bitnami/postgresql  --values .gitlab/helm/postgres-values.yaml
+#    - kubectl get pod
+#    - kubectl get svc
+#  when: manual
+#  environment:
+#    name: production
+
+deployVnStaging:
+  extends: .kubernetes
+  stage: deployVnStaging
+  script:
+    - kubectl config use-context $CI_PROJECT_NAMESPACE/kubernetes-cluster-agent:staging
+    - kubectl config set-context --current --namespace=${KUBE_NAMESPACE}
+    - envsubst < .gitlab/k8s/staging/vn/app-configmap.yaml | kubectl apply -f -
+    - kubectl apply -f .gitlab/k8s/staging/vn/secrets.yaml
+    - kubectl apply -f .gitlab/k8s/staging/vn/pubsub.yaml
+    - envsubst < .gitlab/k8s/staging/vn/app-ingress.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-service.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-deployment.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-cronjob.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-consumer.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-eventbus.yaml | kubectl apply -f -
+    - kubectl get pod
+    - kubectl get svc
+    - kubectl get ingress
+  variables:
+    KUBE_NAMESPACE: logistics-30533267-staging
+    DEPLOYMENT_REPLICA: 2
+    DAPR_APP_ID: logistic-app-vn
+    DAPR_CONSUMER_ID: logistic-consumer-vn
+    DAPR_EVENTBUS_ID: logistic-eventbus-vn
+    DAPR_PUBSUB_NAME: pubsub-vn
+  environment:
+    name: staging
+    url: https://oms-staging.vigoretail.com/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+
+deployInStaging:
+  extends: .kubernetes
+  stage: deployInStaging
+  script:
+    - kubectl config use-context $CI_PROJECT_NAMESPACE/kubernetes-cluster-agent:staging
+    - kubectl config set-context --current --namespace=${KUBE_NAMESPACE}
+    - kubectl apply -f .gitlab/k8s/staging/in/secrets.yaml
+    - kubectl apply -f .gitlab/k8s/staging/in/pubsub.yaml
+    - envsubst < .gitlab/k8s/staging/in/app-configmap.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/staging/in/app-ingress.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-service.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-deployment.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-cronjob.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-consumer.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-eventbus.yaml | kubectl apply -f -
+    - kubectl get pod
+    - kubectl get svc
+    - kubectl get ingress
+  variables:
+    KUBE_NAMESPACE: logistics-india-staging
+    DEPLOYMENT_REPLICA: 2
+    DAPR_APP_ID: logistic-app-in
+    DAPR_CONSUMER_ID: logistic-consumer-in
+    DAPR_EVENTBUS_ID: logistic-eventbus-in
+    DAPR_PUBSUB_NAME: pubsub-in
+  environment:
+    name: staging
+    url: https://oms-staging.vigoretail.in/
+    kubernetes:
+      namespace: logistics-india-staging
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+
+deployVnProduction:
+  extends: .kubernetes
+  stage: deployVnProduction
+  script:
+    - kubectl config use-context $CI_PROJECT_NAMESPACE/kubernetes-cluster-agent:vn
+    - kubectl config set-context --current --namespace=${KUBE_NAMESPACE}
+    - kubectl get pod
+    - kubectl apply -f .gitlab/k8s/production/vn/secrets.yaml --request-timeout=30s
+    - kubectl apply -f .gitlab/k8s/production/vn/pubsub.yaml --request-timeout=30s
+    - envsubst < .gitlab/k8s/production/vn/app-configmap.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/production/vn/app-ingress.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-service.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-deployment.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-cronjob.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-consumer.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-eventbus.yaml | kubectl apply -f -
+    - kubectl get pod
+    - kubectl get svc
+    - kubectl get ingress
+  variables:
+    DEPLOYMENT_REPLICA: 4
+    DAPR_APP_ID: logistic-app-vn
+    DAPR_CONSUMER_ID: logistic-consumer-vn
+    DAPR_EVENTBUS_ID: logistic-eventbus-vn
+    DAPR_PUBSUB_NAME: pubsub-vn
+  environment:
+    name: production
+    url: https://oms.vigoretail.com/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deployInProduction:
+  extends: .kubernetes
+  stage: deployInProduction
+  script:
+    - kubectl config use-context $CI_PROJECT_NAMESPACE/kubernetes-cluster-agent:in
+    - kubectl config set-context --current --namespace=${KUBE_NAMESPACE}
+    - kubectl get pod
+    - kubectl apply -f .gitlab/k8s/production/in/secrets.yaml -v=8
+    - kubectl apply -f .gitlab/k8s/production/in/pubsub.yaml
+    - envsubst < .gitlab/k8s/production/in/app-configmap.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/production/in/app-ingress.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-service.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-deployment.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-cronjob.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-consumer.yaml | kubectl apply -f -
+    - envsubst < .gitlab/k8s/app-eventbus.yaml | kubectl apply -f -
+    - kubectl get pod
+    - kubectl get svc
+    - kubectl get ingress
+  variables:
+    DEPLOYMENT_REPLICA: 4
+    DAPR_APP_ID: logistic-app-in
+    DAPR_CONSUMER_ID: logistic-consumer-in
+    DAPR_EVENTBUS_ID: logistic-eventbus-in
+    DAPR_PUBSUB_NAME: pubsub-in
+  environment:
+    name: production-india
+    url: https://oms.vigoretail.in/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

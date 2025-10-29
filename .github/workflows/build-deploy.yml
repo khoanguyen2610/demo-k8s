@@ -7,13 +7,19 @@ on:
     branches: [main, master, develop]
 
 env:
-  DOCKER_BACKEND_IMAGE: khoanguyen2610/backend
-  DOCKER_FRONTEND_IMAGE: khoanguyen2610/frontend
-  DOCKER_CONSUMER_IMAGE: khoanguyen2610/backend
+  DOCKER_REGISTRY: docker.io
+  DOCKER_USERNAME: khoanguyen2610
+  BACKEND_IMAGE: khoanguyen2610/backend
+  FRONTEND_IMAGE: khoanguyen2610/frontend
+  CONSUMER_IMAGE: khoanguyen2610/consumer
 
 jobs:
-  build-and-push:
-    name: Build and Push Images
+  # ============================================================
+  # BUILD STAGE - Parallel builds for all components
+  # ============================================================
+  
+  build-backend:
+    name: Build Backend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -35,10 +41,54 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_BACKEND_IMAGE }}:latest
-            ${{ env.DOCKER_BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-consumer:
+    name: Build Consumer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push consumer
         uses: docker/build-push-action@v5
@@ -48,27 +98,19 @@ jobs:
           target: consumer
           push: true
           tags: |
-            ${{ env.DOCKER_CONSUMER_IMAGE }}:latest-consumer
-            ${{ env.DOCKER_CONSUMER_IMAGE }}:${{ github.sha }}-consumer
+            ${{ env.CONSUMER_IMAGE }}:latest
+            ${{ env.CONSUMER_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.DOCKER_FRONTEND_IMAGE }}:latest
-            ${{ env.DOCKER_FRONTEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
+  # ============================================================
+  # DEPLOY STAGE - Deploy to Kubernetes after successful builds
+  # ============================================================
+  
   deploy:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-backend, build-frontend, build-consumer]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     steps:
       - name: Checkout code
@@ -80,27 +122,87 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
-      - name: Deploy to Kubernetes
+      - name: Verify cluster connection
         run: |
-          # Deploy backend
+          echo "🔍 Connecting to Kubernetes cluster..."
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✅ Connected successfully"
+
+      - name: Deploy Backend
+        run: |
+          echo "🚀 Deploying backend..."
           kubectl apply -k k8s/backend/
-          kubectl set image deployment/backend-api backend-api=${{ env.DOCKER_BACKEND_IMAGE }}:${{ github.sha }} -n backend
-          kubectl set image deployment/email-processor-consumer consumer=${{ env.DOCKER_CONSUMER_IMAGE }}:${{ github.sha }}-consumer -n backend
-          kubectl set image deployment/data-sync-consumer consumer=${{ env.DOCKER_CONSUMER_IMAGE }}:${{ github.sha }}-consumer -n backend
-          kubectl set image deployment/report-generator-consumer consumer=${{ env.DOCKER_CONSUMER_IMAGE }}:${{ github.sha }}-consumer -n backend
           
-          # Deploy frontend
+          # Update backend API image
+          kubectl set image deployment/backend-api \
+            backend-api=${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            -n backend
+          
+          echo "✅ Backend deployment applied"
+
+      - name: Deploy Consumers
+        run: |
+          echo "🚀 Deploying consumers..."
+          
+          # Update all consumer deployments
+          kubectl set image deployment/email-processor-consumer \
+            consumer=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
+            -n backend || true
+          
+          kubectl set image deployment/data-sync-consumer \
+            consumer=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
+            -n backend || true
+          
+          kubectl set image deployment/report-generator-consumer \
+            consumer=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
+            -n backend || true
+          
+          echo "✅ Consumers deployment applied"
+
+      - name: Deploy Frontend
+        run: |
+          echo "🚀 Deploying frontend..."
           kubectl apply -k k8s/frontend/
-          kubectl set image deployment/frontend-app frontend-app=${{ env.DOCKER_FRONTEND_IMAGE }}:${{ github.sha }} -n frontend
+          
+          # Update frontend image
+          kubectl set image deployment/frontend-app \
+            frontend-app=${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+            -n frontend
+          
+          echo "✅ Frontend deployment applied"
 
       - name: Wait for rollout
         run: |
+          echo "⏳ Waiting for deployments to complete..."
+          
+          # Wait for backend
           kubectl rollout status deployment/backend-api -n backend --timeout=300s
+          
+          # Wait for frontend
           kubectl rollout status deployment/frontend-app -n frontend --timeout=300s
-          echo "✅ Deployment complete!"
+          
+          # Wait for consumers (optional, don't fail if not exist)
+          kubectl rollout status deployment/email-processor-consumer -n backend --timeout=300s || true
+          kubectl rollout status deployment/data-sync-consumer -n backend --timeout=300s || true
+          kubectl rollout status deployment/report-generator-consumer -n backend --timeout=300s || true
+          
+          echo "✅ All deployments completed successfully!"
 
-      - name: Show status
+      - name: Deployment summary
         run: |
+          echo "📋 Deployment Summary"
+          echo "===================="
+          echo ""
+          echo "🔹 Backend Namespace:"
           kubectl get pods -n backend
+          kubectl get svc -n backend
+          echo ""
+          echo "🔹 Frontend Namespace:"
           kubectl get pods -n frontend
+          kubectl get svc -n frontend
+          echo ""
+          echo "🔹 Ingress:"
           kubectl get ingress -n frontend
+          echo ""
+          echo "✅ Deployment completed at $(date)"

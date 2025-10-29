@@ -1,262 +1,409 @@
-# GitHub Actions Workflows
+# GitHub Actions CI/CD
 
-Simple CI/CD pipeline: Build Docker images → Push to Docker Hub → Deploy to Kubernetes.
+Build and deploy pipeline for the DevOps application.
 
-## Workflow: build-deploy.yml
+## Workflow Structure
 
-**Trigger:** Push to main/master/develop, Pull requests
-
-**Flow:**
 ```
-1. Build and Push (all branches)
-   ├─ Build backend image
-   ├─ Build consumer image
-   └─ Build frontend image
-   
-2. Deploy (main/master only)
-   ├─ Apply K8s configs
-   ├─ Update image tags
-   └─ Wait for rollout
+┌─────────────────────────────────────────┐
+│         BUILD STAGE (Parallel)          │
+├─────────────┬──────────────┬────────────┤
+│ Build       │ Build        │ Build      │
+│ Backend     │ Frontend     │ Consumer   │
+└──────┬──────┴──────┬───────┴─────┬──────┘
+       │             │             │
+       └─────────────┴─────────────┘
+                     │
+       ┌─────────────▼──────────────┐
+       │      DEPLOY STAGE           │
+       │  (main/master only)         │
+       ├─────────────────────────────┤
+       │ 1. Deploy Backend           │
+       │ 2. Deploy Consumers         │
+       │ 3. Deploy Frontend          │
+       │ 4. Wait for Rollout         │
+       └─────────────────────────────┘
 ```
+
+## Triggers
+
+- **Push:** main, master, develop
+- **Pull Request:** main, master, develop
+
+**Note:** Deployment only runs on `main` or `master` branch.
+
+## Jobs
+
+### Build Stage (Parallel)
+
+All three builds run in parallel for speed:
+
+1. **build-backend**
+   - Builds backend API
+   - Tags: `latest`, `{sha}`
+   - Registry: `khoanguyen2610/backend`
+
+2. **build-frontend**
+   - Builds React frontend
+   - Tags: `latest`, `{sha}`
+   - Registry: `khoanguyen2610/frontend`
+
+3. **build-consumer**
+   - Builds consumer workers
+   - Tags: `latest`, `{sha}`
+   - Registry: `khoanguyen2610/consumer`
+
+**Features:**
+- ✅ Parallel execution (3 builds at once)
+- ✅ Docker layer caching (GitHub Actions cache)
+- ✅ Multi-stage Dockerfile support
+- ✅ Automatic tagging (SHA + latest)
+
+### Deploy Stage (Sequential)
+
+Runs after all builds succeed, only on main/master:
+
+1. **Configure kubectl**
+   - Decodes KUBECONFIG secret
+   - Sets up cluster connection
+
+2. **Deploy Backend**
+   - Applies Kustomize configs
+   - Updates image to new SHA
+
+3. **Deploy Consumers**
+   - Updates all consumer deployments
+   - email-processor, data-sync, report-generator
+
+4. **Deploy Frontend**
+   - Applies Kustomize configs
+   - Updates image to new SHA
+
+5. **Wait for Rollout**
+   - Waits for all deployments
+   - Timeout: 5 minutes per deployment
+
+6. **Deployment Summary**
+   - Shows pods, services, ingress
+   - Timestamp
 
 ## Required Secrets
 
-Add these in: **Settings → Secrets and variables → Actions**
+Add in: **Settings → Secrets and variables → Actions**
 
-| Secret | Description | How to Get |
-|--------|-------------|------------|
-| `DOCKER_USERNAME` | Docker Hub username | Your username (e.g., `khoanguyen2610`) |
-| `DOCKER_PASSWORD` | Docker Hub password/token | Your password or create a token at hub.docker.com/settings/security |
-| `KUBECONFIG` | Kubernetes config (base64) | See setup below |
+| Secret | Value | Description |
+|--------|-------|-------------|
+| `DOCKER_USERNAME` | `khoanguyen2610` | Docker Hub username |
+| `DOCKER_PASSWORD` | Your password/token | Docker Hub authentication |
+| `KUBECONFIG` | Base64 encoded config | Kubernetes cluster access |
 
-## Quick Setup
+## Setup
 
-### 1. Docker Hub Secrets
+### Quick Setup
 
 ```bash
+# 1. Docker Hub
 gh secret set DOCKER_USERNAME -b "khoanguyen2610"
-gh secret set DOCKER_PASSWORD  # Enter your password/token
-```
+gh secret set DOCKER_PASSWORD
 
-### 2. Kubernetes Config
-
-**If you have a cluster:**
-```bash
-# Get your kubeconfig
-kubectl config view --flatten --minify > kubeconfig.yaml
-
-# Encode and set as secret
-cat kubeconfig.yaml | base64 | gh secret set KUBECONFIG
-
-# Clean up
-rm kubeconfig.yaml
-```
-
-**If you don't have a cluster:**
-
-Use **Minikube** (local):
-```bash
-# Install and start
-brew install minikube
-minikube start
-
-# Get kubeconfig
+# 2. Kubernetes
 kubectl config view --flatten --minify > kubeconfig.yaml
 cat kubeconfig.yaml | base64 | gh secret set KUBECONFIG
 rm kubeconfig.yaml
-```
 
-Or use a **cloud provider**:
-- DigitalOcean Kubernetes (~$12/month)
-- Linode Kubernetes (~$10/month)
-- Oracle Cloud (free tier)
-
-### 3. Verify Setup
-
-```bash
-# Check secrets are set
+# 3. Verify
 gh secret list
-
-# Should show:
-# DOCKER_PASSWORD
-# DOCKER_USERNAME
-# KUBECONFIG
 ```
 
-## How It Works
+### Detailed Setup
 
-### On Every Push
+See [SETUP-SECRETS.md](../SETUP-SECRETS.md)
 
-**All branches (including PRs):**
-- ✅ Builds Docker images
-- ✅ Pushes to Docker Hub with SHA tag
-- ✅ Also tags as `:latest`
+## Usage
 
-**main/master branches only:**
-- ✅ Deploys to Kubernetes
-- ✅ Updates deployments with new image tags
-- ✅ Waits for rollout to complete
+### Automatic Deployment
 
-### Image Tags
+```bash
+# Push to main/master to trigger deployment
+git add .
+git commit -m "Deploy new version"
+git push origin main
+```
 
-Images are tagged with both SHA and `latest`:
+### Watch Progress
+
+1. Go to GitHub repository
+2. Click **Actions** tab
+3. Select latest workflow run
+4. View logs for each job
+
+### Check Deployment
+
+```bash
+# Check pods
+kubectl get pods -n backend
+kubectl get pods -n frontend
+
+# Check services
+kubectl get svc -n backend
+kubectl get svc -n frontend
+
+# Check ingress
+kubectl get ingress -n frontend
+
+# View logs
+kubectl logs -n backend -l app=backend-api
+kubectl logs -n frontend -l app=frontend-app
+```
+
+## Image Tags
+
+All images are tagged with both SHA and `latest`:
+
+```
+# Backend
+khoanguyen2610/backend:abc123def456  # SHA
+khoanguyen2610/backend:latest        # Latest
+
+# Frontend
+khoanguyen2610/frontend:abc123def456
+khoanguyen2610/frontend:latest
+
+# Consumer
+khoanguyen2610/consumer:abc123def456
+khoanguyen2610/consumer:latest
+```
+
+**SHA tags** are used in deployment for:
+- Immutability
+- Traceability
+- Easy rollback
+
+## Deployment Flow
+
+### On Feature Branch
+
+```
+Push to develop
+  ↓
+Build 3 images (parallel)
+  ↓
+Push to Docker Hub
+  ↓
+✅ Done (no deployment)
+```
+
+### On Main Branch
+
+```
+Push to main
+  ↓
+Build 3 images (parallel)
+  ↓
+Push to Docker Hub
+  ↓
+Deploy to Kubernetes
+  ├─ Backend
+  ├─ Consumers
+  └─ Frontend
+  ↓
+Wait for rollout
+  ↓
+✅ Live!
+```
+
+## Rollback
+
+If deployment fails or has issues:
+
+```bash
+# View rollout history
+kubectl rollout history deployment/backend-api -n backend
+
+# Rollback to previous version
+kubectl rollout undo deployment/backend-api -n backend
+kubectl rollout undo deployment/frontend-app -n frontend
+
+# Rollback to specific revision
+kubectl rollout undo deployment/backend-api -n backend --to-revision=2
+```
+
+## Local Development
+
+### Build Locally
 
 ```bash
 # Backend
-khoanguyen2610/backend:abc123         # SHA
-khoanguyen2610/backend:latest         # Latest
-
-# Consumer
-khoanguyen2610/backend:abc123-consumer
-khoanguyen2610/backend:latest-consumer
+docker build -t khoanguyen2610/backend:local backend/
 
 # Frontend
-khoanguyen2610/frontend:abc123
-khoanguyen2610/frontend:latest
+docker build -t khoanguyen2610/frontend:local frontend/
+
+# Consumer
+docker build -t khoanguyen2610/consumer:local --target consumer backend/
 ```
 
-## Deployment Process
-
-When you push to `main` or `master`:
-
-```
-1. Build Phase (~3-5 min)
-   ✓ Builds all images in parallel
-   ✓ Pushes to Docker Hub
-   ✓ Uses layer caching for speed
-
-2. Deploy Phase (~2-3 min)
-   ✓ Connects to K8s cluster
-   ✓ Applies kustomize configs
-   ✓ Updates image tags
-   ✓ Waits for rollout
-
-3. Done!
-   ✓ Shows pod status
-   ✓ Shows ingress info
-```
-
-## Manual Deployment
-
-Deploy from your local machine:
+### Run Locally
 
 ```bash
-# Deploy backend
-kubectl apply -k k8s/backend/
+# Backend API
+docker run -p 8080:8080 khoanguyen2610/backend:local
 
-# Deploy frontend
+# Frontend
+docker run -p 3000:80 khoanguyen2610/frontend:local
+
+# Consumer
+docker run khoanguyen2610/consumer:local --task email-processor
+```
+
+### Deploy Locally
+
+```bash
+# Deploy to local K8s
+kubectl apply -k k8s/backend/
 kubectl apply -k k8s/frontend/
 
-# Update images to latest
-kubectl set image deployment/backend-api backend-api=khoanguyen2610/backend:latest -n backend
-kubectl set image deployment/frontend-app frontend-app=khoanguyen2610/frontend:latest -n frontend
+# Use local images
+kubectl set image deployment/backend-api backend-api=khoanguyen2610/backend:local -n backend
+kubectl set image deployment/frontend-app frontend-app=khoanguyen2610/frontend:local -n frontend
 ```
 
 ## Troubleshooting
 
 ### Build Fails
 
-Check:
-- Docker Hub credentials are correct
-- Dockerfile syntax is valid
-- All required files exist
+**Check:**
+- Docker Hub credentials
+- Dockerfile syntax
+- Build context files exist
 
-### Deploy Fails
-
-Check:
-- KUBECONFIG secret is set correctly
-- Cluster is accessible
-- Namespaces exist (backend, frontend)
-
+**Fix:**
 ```bash
-# Test kubeconfig locally
-echo "$KUBECONFIG_BASE64" | base64 -d > test-config
-kubectl --kubeconfig=test-config cluster-info
+# Test build locally
+docker build -f backend/Dockerfile backend/
+docker build -f frontend/Dockerfile frontend/
 ```
 
-### Check Deployment
+### Deploy Fails - KUBECONFIG
 
+**Error:** `connection refused to localhost:8080`
+
+**Fix:**
 ```bash
-# View pods
+# Re-encode kubeconfig
+kubectl config view --flatten --minify > kubeconfig.yaml
+cat kubeconfig.yaml | base64 | gh secret set KUBECONFIG
+rm kubeconfig.yaml
+```
+
+### Deploy Fails - Image Pull
+
+**Error:** `ImagePullBackOff` or `ErrImagePull`
+
+**Check:**
+```bash
+# Verify image exists
+docker pull khoanguyen2610/backend:latest
+
+# Check deployment
+kubectl describe pod <pod-name> -n backend
+```
+
+**Fix:**
+- Check Docker Hub credentials
+- Verify image was pushed successfully
+- Check image name/tag spelling
+
+### Rollout Timeout
+
+**Error:** `rollout status timed out`
+
+**Check:**
+```bash
+# View pod status
 kubectl get pods -n backend
-kubectl get pods -n frontend
-
-# View logs
-kubectl logs -n backend -l app=backend-api
-kubectl logs -n frontend -l app=frontend-app
-
-# Check ingress
-kubectl get ingress -n frontend
+kubectl describe pod <pod-name> -n backend
+kubectl logs <pod-name> -n backend
 ```
+
+**Common causes:**
+- Application crash on startup
+- Wrong environment variables
+- Missing config/secrets
+- Resource limits too low
+
+## Performance
+
+### Build Time
+
+- **Parallel builds:** ~3-5 minutes
+- **With cache:** ~1-2 minutes
+
+### Deploy Time
+
+- **Apply configs:** ~10 seconds
+- **Rollout:** ~1-3 minutes
+- **Total:** ~2-4 minutes
+
+### Optimization Tips
+
+1. **Docker layer caching** (already enabled)
+2. **Multi-stage builds** (already implemented)
+3. **Smaller base images** (consider alpine)
+4. **Parallel deployments** (can be added if needed)
 
 ## Monitoring
 
-### View Workflow
+### GitHub Actions
 
-1. Go to GitHub → **Actions** tab
-2. Click on the latest run
-3. View logs for each step
+- View workflow runs: Actions tab
+- Download logs: Click run → Download logs
+- Re-run failed jobs: Click "Re-run jobs"
 
-### Check Kubernetes
+### Kubernetes
 
 ```bash
-# Check all resources
-kubectl get all -n backend
-kubectl get all -n frontend
-
-# Check specific deployment
-kubectl describe deployment backend-api -n backend
+# Watch deployments
+kubectl get deployments -n backend -w
 
 # Watch pods
 kubectl get pods -n backend -w
-```
 
-## Rollback
+# Stream logs
+kubectl logs -f -n backend -l app=backend-api
 
-If deployment fails:
-
-```bash
-# Rollback backend
-kubectl rollout undo deployment/backend-api -n backend
-
-# Rollback frontend
-kubectl rollout undo deployment/frontend-app -n frontend
-
-# Check rollout history
-kubectl rollout history deployment/backend-api -n backend
-```
-
-## Local Development
-
-Test locally without GitHub Actions:
-
-```bash
-# Build images
-docker build -t khoanguyen2610/backend:dev backend/
-docker build -t khoanguyen2610/frontend:dev frontend/
-
-# Run locally
-docker run -p 8080:8080 khoanguyen2610/backend:dev
-docker run -p 3000:80 khoanguyen2610/frontend:dev
-
-# Or deploy to local K8s
-kubectl apply -k k8s/backend/
-kubectl apply -k k8s/frontend/
+# Events
+kubectl get events -n backend --sort-by='.lastTimestamp'
 ```
 
 ## Environment Variables
 
-Default images (can be changed in workflow):
+Default values in workflow:
 
 ```yaml
-DOCKER_BACKEND_IMAGE: khoanguyen2610/backend
-DOCKER_FRONTEND_IMAGE: khoanguyen2610/frontend
-DOCKER_CONSUMER_IMAGE: khoanguyen2610/backend
+DOCKER_REGISTRY: docker.io
+DOCKER_USERNAME: khoanguyen2610
+BACKEND_IMAGE: khoanguyen2610/backend
+FRONTEND_IMAGE: khoanguyen2610/frontend
+CONSUMER_IMAGE: khoanguyen2610/consumer
 ```
 
-## Resources
+To customize, edit `.github/workflows/build-deploy.yml`
 
-- [Kubernetes Configs](../k8s/README.md)
+## Related Documentation
+
+- [Setup Secrets](../SETUP-SECRETS.md)
+- [Kubernetes Configs](../../k8s/README.md)
 - [Backend README](../../backend/README.md)
 - [Frontend README](../../frontend/README.md)
-- [Setup Secrets Guide](../SETUP-SECRETS.md)
+
+## Support
+
+**Workflow issues?**
+- Check GitHub Actions logs
+- Verify secrets are set: `gh secret list`
+
+**Kubernetes issues?**
+- Check pod status: `kubectl get pods -n backend`
+- View logs: `kubectl logs <pod-name> -n backend`
+- Describe resources: `kubectl describe deployment backend-api -n backend`
