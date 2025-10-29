@@ -9,7 +9,3 @@ resources:
   - base/service.yaml
   - base/consumer-deployment.yaml
 
-commonLabels:
-  app: devops-backend
-  managed-by: kustomize
-

@@ -9,7 +9,3 @@ resources:
   - base/service.yaml
   - base/ingress.yaml
 
-commonLabels:
-  app: devops-frontend
-  managed-by: kustomize
-
