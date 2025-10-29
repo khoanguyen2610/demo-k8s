@@ -1,0 +1,13 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: demo-k8s
+  region: ap-southeast-1
+
+managedNodeGroups:
+  - name: demo-k8s
+    instanceType: t3.micro  # Free tier eligible
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 1  # Keep at 1 for free tier

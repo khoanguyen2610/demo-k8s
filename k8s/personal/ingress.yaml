@@ -1,0 +1,59 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  namespace: frontend
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # For AWS ALB (if using EKS)
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: nginx  # Change based on your ingress controller
+  rules:
+  - host: kn-tech.click  # Update with your domain or use IP
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-app-service
+            port:
+              number: 80
+---
+# Backend API ingress - handles /api routing for main domain
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-api-ingress
+  namespace: backend
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: kn-tech.click  # Same domain as frontend
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-api-service
+            port:
+              number: 8080
+  - host: api.kn-tech.click  # Optional: dedicated API subdomain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-api-service
+            port:
+              number: 8080
+

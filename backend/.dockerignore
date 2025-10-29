@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# IDE
+.vscode
+.idea
+
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+main
+
+# Test files
+*_test.go
+
+# Environment files
+.env
+.env.local
+

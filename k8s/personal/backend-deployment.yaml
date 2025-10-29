@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: backend
+  labels:
+    app: backend-api
+    tier: backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: backend-api
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: backend-api
+        tier: backend
+    spec:
+      containers:
+      - name: backend-api
+        image: ghcr.io/YOUR_GITHUB_USERNAME/devops/backend:latest  # Updated by CI/CD
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        env:
+        - name: PORT
+          value: "8080"
+        - name: ENV
+          value: "production"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api-service
+  namespace: backend
+  labels:
+    app: backend-api
+    tier: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend-api
+    tier: backend
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  sessionAffinity: None
+
