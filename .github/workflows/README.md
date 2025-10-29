@@ -1,271 +1,262 @@
 # GitHub Actions Workflows
 
-This directory contains GitHub Actions workflows for building, testing, and deploying the application using Kustomize.
+Simple CI/CD pipeline: Build Docker images → Push to Docker Hub → Deploy to Kubernetes.
 
-## Workflows
+## Workflow: build-deploy.yml
 
-### 1. build-deploy.yml (Main CI/CD)
+**Trigger:** Push to main/master/develop, Pull requests
 
-**Trigger:** Push to main/master/develop branches, Pull requests
-
-**Jobs:**
-- `build-backend` - Build and push backend API Docker image
-- `build-consumer` - Build and push consumer workers Docker image
-- `build-frontend` - Build and push frontend Docker image
-- `deploy-k8s` - Deploy to Kubernetes using Kustomize (main/master only)
-- `rollback-on-failure` - Automatic rollback if deployment fails
-
-**Features:**
-- ✅ Parallel builds for faster CI/CD
-- ✅ Docker layer caching (GitHub Actions cache)
-- ✅ Automatic tagging (branch, SHA, latest)
-- ✅ Kustomize-based deployment
-- ✅ Automatic rollback on failure
-- ✅ Environment protection for production
-
-### 2. helm-preview.yml (PR Validation)
-
-**Trigger:** Pull requests that modify K8s configs
-
-**Paths Watched:**
-- `k8s/backend/**`
-- `k8s/frontend/**`
-
-**Jobs:**
-- `validate-kustomize` - Build kustomizations, validate manifests, comment on PR
-
-**Features:**
-- ✅ Kustomize build validation
-- ✅ Manifest generation preview
-- ✅ Kubernetes resource validation (dry-run)
-- ✅ Automated PR comments with results
+**Flow:**
+```
+1. Build and Push (all branches)
+   ├─ Build backend image
+   ├─ Build consumer image
+   └─ Build frontend image
+   
+2. Deploy (main/master only)
+   ├─ Apply K8s configs
+   ├─ Update image tags
+   └─ Wait for rollout
+```
 
 ## Required Secrets
 
-Add these secrets in your GitHub repository settings:
+Add these in: **Settings → Secrets and variables → Actions**
 
-### Docker Hub
-| Secret | Description |
-|--------|-------------|
-| `DOCKER_USERNAME` | Your Docker Hub username |
-| `DOCKER_PASSWORD` | Your Docker Hub password or access token |
+| Secret | Description | How to Get |
+|--------|-------------|------------|
+| `DOCKER_USERNAME` | Docker Hub username | Your username (e.g., `khoanguyen2610`) |
+| `DOCKER_PASSWORD` | Docker Hub password/token | Your password or create a token at hub.docker.com/settings/security |
+| `KUBECONFIG` | Kubernetes config (base64) | See setup below |
 
-### Kubernetes
-| Secret | Description |
-|--------|-------------|
-| `KUBECONFIG` | Base64 encoded kubeconfig file for your cluster |
+## Quick Setup
 
-## Setup Instructions
-
-### 1. Get Kubeconfig
+### 1. Docker Hub Secrets
 
 ```bash
-# For your Kubernetes cluster
+gh secret set DOCKER_USERNAME -b "khoanguyen2610"
+gh secret set DOCKER_PASSWORD  # Enter your password/token
+```
+
+### 2. Kubernetes Config
+
+**If you have a cluster:**
+```bash
+# Get your kubeconfig
 kubectl config view --flatten --minify > kubeconfig.yaml
 
-# Encode kubeconfig for GitHub secret
-cat kubeconfig.yaml | base64 -w 0  # Linux
-cat kubeconfig.yaml | base64        # macOS
+# Encode and set as secret
+cat kubeconfig.yaml | base64 | gh secret set KUBECONFIG
+
+# Clean up
+rm kubeconfig.yaml
 ```
 
-### 2. Add Secrets to GitHub
+**If you don't have a cluster:**
+
+Use **Minikube** (local):
+```bash
+# Install and start
+brew install minikube
+minikube start
+
+# Get kubeconfig
+kubectl config view --flatten --minify > kubeconfig.yaml
+cat kubeconfig.yaml | base64 | gh secret set KUBECONFIG
+rm kubeconfig.yaml
+```
+
+Or use a **cloud provider**:
+- DigitalOcean Kubernetes (~$12/month)
+- Linode Kubernetes (~$10/month)
+- Oracle Cloud (free tier)
+
+### 3. Verify Setup
 
 ```bash
-# Using GitHub CLI
-gh secret set DOCKER_USERNAME
-gh secret set DOCKER_PASSWORD
-gh secret set KUBECONFIG
+# Check secrets are set
+gh secret list
 
-# Or via GitHub UI:
-# Repository → Settings → Secrets and variables → Actions → New repository secret
+# Should show:
+# DOCKER_PASSWORD
+# DOCKER_USERNAME
+# KUBECONFIG
 ```
 
-### 3. Configure Environment Protection (Optional)
+## How It Works
 
-For production environment:
-1. Go to Settings → Environments → New environment
-2. Name it "production"
-3. Add protection rules:
-   - Required reviewers
-   - Wait timer
-   - Deployment branches (main/master only)
+### On Every Push
 
-## Workflow Details
+**All branches (including PRs):**
+- ✅ Builds Docker images
+- ✅ Pushes to Docker Hub with SHA tag
+- ✅ Also tags as `:latest`
 
-### Build & Deploy Workflow
+**main/master branches only:**
+- ✅ Deploys to Kubernetes
+- ✅ Updates deployments with new image tags
+- ✅ Waits for rollout to complete
 
-```yaml
-Trigger: Push to main/master/develop, PRs
+### Image Tags
 
-Flow:
-  1. Build Images (Parallel)
-     ├─ Backend API
-     ├─ Consumer Workers
-     └─ Frontend App
-  
-  2. Deploy to Kubernetes (main/master only)
-     ├─ Apply backend kustomization
-     ├─ Apply frontend kustomization
-     ├─ Update image tags
-     └─ Wait for rollout
-  
-  3. Rollback (if deploy fails)
-     └─ Undo all deployments
-```
+Images are tagged with both SHA and `latest`:
 
-**Image Tags:**
-- Branch + SHA: `main-abc123` (for tracking)
-- Latest: `latest` (for quick reference)
-- Consumer: `main-abc123-consumer` (separate tag)
+```bash
+# Backend
+khoanguyen2610/backend:abc123         # SHA
+khoanguyen2610/backend:latest         # Latest
 
-### PR Preview Workflow
+# Consumer
+khoanguyen2610/backend:abc123-consumer
+khoanguyen2610/backend:latest-consumer
 
-```yaml
-Trigger: PR modifying k8s/backend/** or k8s/frontend/**
-
-Flow:
-  1. Build kustomizations
-  2. Validate manifests (dry-run)
-  3. Comment on PR with:
-     - Validation results
-     - Manifest previews
-     - Deploy commands
+# Frontend
+khoanguyen2610/frontend:abc123
+khoanguyen2610/frontend:latest
 ```
 
 ## Deployment Process
 
 When you push to `main` or `master`:
 
-1. **Build Phase** (~3-5 minutes)
-   - Builds Docker images in parallel
-   - Pushes to Docker Hub
-   - Uses layer caching for speed
+```
+1. Build Phase (~3-5 min)
+   ✓ Builds all images in parallel
+   ✓ Pushes to Docker Hub
+   ✓ Uses layer caching for speed
 
-2. **Deploy Phase** (~2-3 minutes)
-   - Connects to Kubernetes cluster
-   - Applies Kustomize configurations
-   - Updates image tags dynamically
-   - Waits for rollout completion
+2. Deploy Phase (~2-3 min)
+   ✓ Connects to K8s cluster
+   ✓ Applies kustomize configs
+   ✓ Updates image tags
+   ✓ Waits for rollout
 
-3. **Verify Phase**
-   - Checks deployment status
-   - Lists pods and services
-   - Shows ingress configuration
+3. Done!
+   ✓ Shows pod status
+   ✓ Shows ingress info
+```
 
 ## Manual Deployment
 
-If you need to deploy manually:
+Deploy from your local machine:
 
 ```bash
 # Deploy backend
 kubectl apply -k k8s/backend/
-kubectl set image deployment/backend-api backend-api=khoanguyen2610/backend:latest -n backend
 
 # Deploy frontend
 kubectl apply -k k8s/frontend/
+
+# Update images to latest
+kubectl set image deployment/backend-api backend-api=khoanguyen2610/backend:latest -n backend
 kubectl set image deployment/frontend-app frontend-app=khoanguyen2610/frontend:latest -n frontend
 ```
 
 ## Troubleshooting
 
-### Deployment Fails
+### Build Fails
 
-The workflow automatically rolls back failed deployments. Check:
+Check:
+- Docker Hub credentials are correct
+- Dockerfile syntax is valid
+- All required files exist
+
+### Deploy Fails
+
+Check:
+- KUBECONFIG secret is set correctly
+- Cluster is accessible
+- Namespaces exist (backend, frontend)
+
 ```bash
+# Test kubeconfig locally
+echo "$KUBECONFIG_BASE64" | base64 -d > test-config
+kubectl --kubeconfig=test-config cluster-info
+```
+
+### Check Deployment
+
+```bash
+# View pods
 kubectl get pods -n backend
 kubectl get pods -n frontend
-kubectl describe pod <pod-name> -n <namespace>
+
+# View logs
+kubectl logs -n backend -l app=backend-api
+kubectl logs -n frontend -l app=frontend-app
+
+# Check ingress
+kubectl get ingress -n frontend
 ```
 
-### KUBECONFIG Secret Issues
+## Monitoring
 
-Verify your kubeconfig is properly base64 encoded:
-```bash
-# Decode to verify
-echo "$KUBECONFIG_SECRET" | base64 -d
+### View Workflow
 
-# Should show valid kubeconfig YAML
-```
-
-### Image Pull Errors
-
-Ensure Docker Hub credentials are correct:
-```bash
-# Test locally
-docker login
-docker pull khoanguyen2610/backend:latest
-```
-
-## Monitoring Deployments
-
-### View Workflow Runs
-
-1. Go to Actions tab in GitHub
-2. Select the workflow
+1. Go to GitHub → **Actions** tab
+2. Click on the latest run
 3. View logs for each step
 
-### Check Kubernetes Status
+### Check Kubernetes
 
 ```bash
-# Backend
-kubectl get deployments -n backend
-kubectl get pods -n backend -w
-kubectl logs -n backend -l app=backend-api
+# Check all resources
+kubectl get all -n backend
+kubectl get all -n frontend
 
-# Frontend
-kubectl get deployments -n frontend
-kubectl get pods -n frontend -w
-kubectl get ingress -n frontend
+# Check specific deployment
+kubectl describe deployment backend-api -n backend
+
+# Watch pods
+kubectl get pods -n backend -w
 ```
 
 ## Rollback
 
-### Automatic Rollback
-The workflow automatically rolls back failed deployments.
+If deployment fails:
 
-### Manual Rollback
 ```bash
-# Backend
+# Rollback backend
 kubectl rollout undo deployment/backend-api -n backend
-kubectl rollout undo deployment/email-processor-consumer -n backend
 
-# Frontend
+# Rollback frontend
 kubectl rollout undo deployment/frontend-app -n frontend
+
+# Check rollout history
+kubectl rollout history deployment/backend-api -n backend
 ```
 
-## Security Best Practices
+## Local Development
 
-1. **Secrets Management**
-   - Never commit kubeconfig files
-   - Rotate secrets regularly
-   - Use minimal permissions
+Test locally without GitHub Actions:
 
-2. **Docker Hub**
-   - Use access tokens instead of passwords
-   - Limit token scope to push/pull only
+```bash
+# Build images
+docker build -t khoanguyen2610/backend:dev backend/
+docker build -t khoanguyen2610/frontend:dev frontend/
 
-3. **Kubernetes**
-   - Use RBAC with minimal permissions
-   - Enable audit logging
-   - Regular security updates
+# Run locally
+docker run -p 8080:8080 khoanguyen2610/backend:dev
+docker run -p 3000:80 khoanguyen2610/frontend:dev
 
-## Performance Tips
+# Or deploy to local K8s
+kubectl apply -k k8s/backend/
+kubectl apply -k k8s/frontend/
+```
 
-1. **Docker Layer Caching**
-   - Already enabled via GitHub Actions cache
-   - Significantly speeds up builds
+## Environment Variables
 
-2. **Parallel Builds**
-   - Three builds run simultaneously
-   - Reduces total build time
+Default images (can be changed in workflow):
 
-3. **Efficient Kustomize**
-   - Small, focused kustomizations
-   - Fast build and apply times
+```yaml
+DOCKER_BACKEND_IMAGE: khoanguyen2610/backend
+DOCKER_FRONTEND_IMAGE: khoanguyen2610/frontend
+DOCKER_CONSUMER_IMAGE: khoanguyen2610/backend
+```
 
 ## Resources
 
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Kustomize Documentation](https://kustomize.io/)
-- [kubectl Reference](https://kubernetes.io/docs/reference/kubectl/)
-- [Docker Hub Documentation](https://docs.docker.com/docker-hub/)
+- [Kubernetes Configs](../k8s/README.md)
+- [Backend README](../../backend/README.md)
+- [Frontend README](../../frontend/README.md)
+- [Setup Secrets Guide](../SETUP-SECRETS.md)
