@@ -1,12 +1,19 @@
-name: Docker Build and Push
+name: Docker Build and Push (DISABLED - Use backend-cicd.yml and frontend-cicd.yml instead)
+
+# This workflow is disabled - we now use the new comprehensive CI/CD workflows:
+# - backend-cicd.yml for backend
+# - frontend-cicd.yml for frontend
+# These new workflows include better testing, security scanning, and K8s deployment
 
 on:
-  push:
-    branches: [ main, master, develop ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch: # Manual trigger only
+  # Disabled automatic triggers:
+  # push:
+  #   branches: [ main, master, develop ]
+  #   tags:
+  #     - 'v*'
+  # pull_request:
+  #   branches: [ main, master ]
 
 env:
   REGISTRY: docker.io
