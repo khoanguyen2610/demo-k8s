@@ -1,0 +1,46 @@
+# Production environment configuration
+
+namespace: backend
+
+image:
+  repository: khoanguyen2610/backend
+  tag: consumer-v1.0.0  # Use specific version in production!
+  pullPolicy: IfNotPresent
+
+# Higher resources for production
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Multiple replicas for high availability
+tasks:
+  - name: email-processor
+    replicas: 3
+    description: "Processes emails (sending, filtering, categorizing, archiving)"
+    # Override resources for this task if needed
+    resources:
+      requests:
+        cpu: 150m
+        memory: 192Mi
+      limits:
+        cpu: 600m
+        memory: 384Mi
+
+  - name: data-sync
+    replicas: 2
+    description: "Syncs data between systems (DB, API, files, cache)"
+
+  - name: report-generator
+    replicas: 2
+    description: "Generates reports (daily, weekly, monthly, quarterly)"
+
+env:
+  - name: ENV
+    value: "production"
+  - name: LOG_LEVEL
+    value: "info"
+

@@ -1,0 +1,54 @@
+# Example: How to add a new consumer task
+# Just add it to the tasks list - the template loop will generate the deployment!
+
+namespace: backend
+
+image:
+  repository: khoanguyen2610/backend
+  tag: consumer-latest
+  pullPolicy: Always
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Add your new task here - no need to duplicate YAML!
+tasks:
+  - name: email-processor
+    replicas: 1
+    description: "Processes emails (sending, filtering, categorizing, archiving)"
+
+  - name: data-sync
+    replicas: 1
+    description: "Syncs data between systems (DB, API, files, cache)"
+
+  - name: report-generator
+    replicas: 1
+    description: "Generates reports (daily, weekly, monthly, quarterly)"
+
+  # NEW TASK - just add these 3 lines!
+  - name: notification-sender
+    replicas: 2
+    description: "Sends push notifications to mobile apps"
+    # Optional: custom resources for this task
+    resources:
+      requests:
+        cpu: 75m
+        memory: 96Mi
+
+  # Another new task
+  - name: backup-worker
+    replicas: 1
+    description: "Performs automated backups"
+    env:
+      - name: BACKUP_INTERVAL
+        value: "3600"  # Task-specific env var
+
+env:
+  - name: ENV
+    value: "production"
+

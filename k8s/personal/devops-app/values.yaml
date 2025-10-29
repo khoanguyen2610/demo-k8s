@@ -1,0 +1,168 @@
+# Default values for devops-app
+# All configuration in one place!
+
+# Global settings
+global:
+  domain: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com
+  environment: production
+
+# Enable/disable components
+components:
+  backend: true
+  frontend: true
+  consumers: true
+  ingress: true
+
+# Namespaces
+namespaces:
+  backend: backend
+  frontend: frontend
+
+# Backend API configuration
+backend:
+  enabled: true
+  name: backend-api
+  replicas: 1
+  
+  image:
+    repository: khoanguyen2610/backend
+    tag: latest
+    pullPolicy: Always
+  
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+  
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  
+  probes:
+    liveness:
+      path: /api/v1/health
+      port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /api/v1/health
+      port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 3
+  
+  env:
+    - name: PORT
+      value: "8080"
+    - name: ENV
+      value: "production"
+
+# Frontend application configuration
+frontend:
+  enabled: true
+  name: frontend-app
+  replicas: 1
+  
+  image:
+    repository: khoanguyen2610/frontend
+    tag: latest
+    pullPolicy: Always
+  
+  service:
+    type: NodePort
+    port: 80
+    targetPort: 3000
+  
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 150m
+      memory: 128Mi
+  
+  probes:
+    liveness:
+      path: /
+      port: 3000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readiness:
+      path: /
+      port: 3000
+      initialDelaySeconds: 3
+      periodSeconds: 5
+      timeoutSeconds: 2
+      failureThreshold: 3
+
+# Consumer workers configuration
+consumers:
+  enabled: true
+  
+  image:
+    repository: khoanguyen2610/backend
+    tag: consumer-latest
+    pullPolicy: Always
+  
+  # Default resources for all consumers
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  
+  # Global env vars for all consumers
+  env:
+    - name: ENV
+      value: "production"
+  
+  # Define all consumer tasks
+  tasks:
+    - name: email-processor
+      replicas: 1
+      description: "Processes emails (sending, filtering, categorizing, archiving)"
+    
+    - name: data-sync
+      replicas: 1
+      description: "Syncs data between systems (DB, API, files, cache)"
+    
+    - name: report-generator
+      replicas: 1
+      description: "Generates reports (daily, weekly, monthly, quarterly)"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  
+  # Frontend ingress
+  frontend:
+    enabled: true
+    host: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com
+    path: /
+    pathType: Prefix
+  
+  # Backend ingress
+  backend:
+    enabled: true
+    host: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com
+    path: /api
+    pathType: Prefix
+
+# Deployment settings
+revisionHistoryLimit: 2
+

@@ -1,0 +1,60 @@
+{{- if .Values.consumers.enabled }}
+{{- range .Values.consumers.tasks }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-{{ .name }}
+  namespace: {{ $.Values.namespaces.backend }}
+  labels:
+    app: consumer
+    task: {{ .name }}
+    tier: backend
+    managed-by: helm
+  {{- if .description }}
+  annotations:
+    description: {{ .description | quote }}
+  {{- end }}
+spec:
+  replicas: {{ .replicas | default 1 }}
+  revisionHistoryLimit: {{ $.Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: consumer
+      task: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: consumer
+        task: {{ .name }}
+        tier: backend
+    spec:
+      containers:
+      - name: {{ .name }}
+        image: "{{ $.Values.consumers.image.repository }}:{{ $.Values.consumers.image.tag }}"
+        imagePullPolicy: {{ $.Values.consumers.image.pullPolicy }}
+        args:
+        - "--task={{ .name }}"
+        resources:
+          {{- if .resources }}
+          {{- toYaml .resources | nindent 10 }}
+          {{- else }}
+          {{- toYaml $.Values.consumers.resources | nindent 10 }}
+          {{- end }}
+        env:
+        - name: TASK_NAME
+          value: {{ .name | quote }}
+        {{- range $.Values.consumers.env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- if .env }}
+        {{- range .env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}
+      restartPolicy: Always
+{{- end }}
+{{- end }}
+

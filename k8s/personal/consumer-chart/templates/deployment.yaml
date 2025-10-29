@@ -1,0 +1,61 @@
+{{- range .Values.tasks }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-{{ .name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    {{- range $key, $value := $.Values.commonLabels }}
+    {{ $key }}: {{ $value }}
+    {{- end }}
+    task: {{ .name }}
+  {{- if .description }}
+  annotations:
+    description: {{ .description | quote }}
+  {{- end }}
+spec:
+  replicas: {{ .replicas | default 1 }}
+  revisionHistoryLimit: {{ $.Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- range $key, $value := $.Values.commonLabels }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+      task: {{ .name }}
+  template:
+    metadata:
+      labels:
+        {{- range $key, $value := $.Values.commonLabels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+        task: {{ .name }}
+    spec:
+      containers:
+      - name: {{ .name }}
+        image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+        imagePullPolicy: {{ $.Values.image.pullPolicy }}
+        args:
+        - "--task={{ .name }}"
+        resources:
+          {{- if .resources }}
+          {{- toYaml .resources | nindent 10 }}
+          {{- else }}
+          {{- toYaml $.Values.resources | nindent 10 }}
+          {{- end }}
+        env:
+        - name: TASK_NAME
+          value: {{ .name | quote }}
+        {{- range $.Values.env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- if .env }}
+        {{- range .env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}
+      restartPolicy: {{ $.Values.restartPolicy }}
+{{- end }}
+

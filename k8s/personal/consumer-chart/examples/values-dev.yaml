@@ -1,0 +1,38 @@
+# Development environment configuration
+
+namespace: backend-dev
+
+image:
+  repository: khoanguyen2610/backend
+  tag: consumer-latest
+  pullPolicy: Always
+
+# Lower resources for dev
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+# Single replica for each task in dev
+tasks:
+  - name: email-processor
+    replicas: 1
+    description: "Processes emails (sending, filtering, categorizing, archiving)"
+
+  - name: data-sync
+    replicas: 1
+    description: "Syncs data between systems (DB, API, files, cache)"
+
+  - name: report-generator
+    replicas: 1
+    description: "Generates reports (daily, weekly, monthly, quarterly)"
+
+env:
+  - name: ENV
+    value: "development"
+  - name: LOG_LEVEL
+    value: "debug"
+

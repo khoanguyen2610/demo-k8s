@@ -1,0 +1,86 @@
+# Production environment configuration
+
+global:
+  domain: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com
+  environment: production
+
+# Backend configuration for production
+backend:
+  enabled: true
+  replicas: 3  # Multiple replicas for HA
+  image:
+    repository: khoanguyen2610/backend
+    tag: v1.0.0  # Use specific version in prod
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    - name: PORT
+      value: "8080"
+    - name: ENV
+      value: "production"
+    - name: LOG_LEVEL
+      value: "info"
+
+# Frontend configuration for production
+frontend:
+  enabled: true
+  replicas: 2  # Multiple replicas for HA
+  image:
+    repository: khoanguyen2610/frontend
+    tag: v1.0.0  # Use specific version in prod
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+# Consumers configuration for production
+consumers:
+  enabled: true
+  image:
+    repository: khoanguyen2610/backend
+    tag: consumer-v1.0.0  # Use specific version
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    - name: ENV
+      value: "production"
+    - name: LOG_LEVEL
+      value: "info"
+  tasks:
+    - name: email-processor
+      replicas: 3  # Scale for production
+      resources:
+        requests:
+          cpu: 150m
+          memory: 192Mi
+    - name: data-sync
+      replicas: 2
+    - name: report-generator
+      replicas: 2
+
+# Ingress enabled for production
+ingress:
+  enabled: true
+  frontend:
+    enabled: true
+    host: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com
+  backend:
+    enabled: true
+    host: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com
+

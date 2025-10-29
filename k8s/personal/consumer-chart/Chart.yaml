@@ -1,0 +1,13 @@
+apiVersion: v2
+name: consumer-tasks
+description: A Helm chart for consumer background task processors
+type: application
+version: 1.0.0
+appVersion: "1.0"
+keywords:
+  - consumer
+  - background-tasks
+  - workers
+maintainers:
+  - name: Khoa Nguyen
+

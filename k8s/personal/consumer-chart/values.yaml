@@ -1,0 +1,62 @@
+# Default values for consumer-tasks
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+namespace: backend
+image:
+  repository: khoanguyen2610/backend
+  tag: consumer-latest
+  pullPolicy: Always
+
+# Common labels
+commonLabels:
+  app: consumer
+  tier: backend
+
+# Default resource limits
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Environment variables (applied to all tasks)
+env:
+  - name: ENV
+    value: "production"
+
+# Deployment settings
+revisionHistoryLimit: 2
+restartPolicy: Always
+
+# Define all consumer tasks
+tasks:
+  - name: email-processor
+    replicas: 1
+    description: "Processes emails (sending, filtering, categorizing, archiving)"
+    # Optional: Override resources per task
+    # resources:
+    #   requests:
+    #     cpu: 100m
+    #     memory: 128Mi
+
+  - name: data-sync
+    replicas: 1
+    description: "Syncs data between systems (DB, API, files, cache)"
+    # Optional: Override resources per task
+    # resources:
+    #   limits:
+    #     cpu: 300m
+
+  - name: report-generator
+    replicas: 1
+    description: "Generates reports (daily, weekly, monthly, quarterly)"
+    # Optional: Override resources per task
+    # resources:
+    #   requests:
+    #     cpu: 75m
+    #     memory: 96Mi
+

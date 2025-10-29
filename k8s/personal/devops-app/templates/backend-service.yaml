@@ -1,0 +1,23 @@
+{{- if .Values.backend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.backend.name }}-service
+  namespace: {{ .Values.namespaces.backend }}
+  labels:
+    app: {{ .Values.backend.name }}
+    tier: backend
+    managed-by: helm
+spec:
+  type: {{ .Values.backend.service.type }}
+  selector:
+    app: {{ .Values.backend.name }}
+    tier: backend
+  ports:
+  - port: {{ .Values.backend.service.port }}
+    targetPort: {{ .Values.backend.service.targetPort }}
+    protocol: TCP
+    name: http
+  sessionAffinity: None
+{{- end }}
+

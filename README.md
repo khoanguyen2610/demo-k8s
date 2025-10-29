@@ -25,6 +25,10 @@ A full-stack application with Go backend API and React frontend, fully container
 - **Endpoints**:
   - `GET /api/v1/health` - Health check
   - `GET /api/v1/users` - Get mock users
+- **Consumer Workers**: 3 background task processors
+  - email-processor: Handles email operations
+  - data-sync: Syncs data between systems
+  - report-generator: Generates reports
 
 ### Frontend (React)
 - **Technology**: React 18 + Nginx
@@ -196,6 +200,147 @@ devops/
 - Backend: `8080` (internal only, accessed via frontend proxy)
 
 The frontend Nginx server proxies `/api/*` requests to the backend, enabling seamless communication between services.
+
+## ☸️ Kubernetes Deployment (Helm)
+
+This project uses **Helm charts** for simplified Kubernetes deployment with templates, loops, and variables.
+
+### Quick Start with Helm
+
+```bash
+# Install Helm (if not already installed)
+brew install helm  # macOS
+# or visit https://helm.sh/docs/intro/install/
+
+# Deploy entire application (backend + frontend + consumers + ingress)
+cd /Users/khoa.nguyen/Workings/Personal/devops
+helm install myapp k8s/personal/devops-app/ --create-namespace
+
+# Check status
+helm status myapp
+kubectl get all -n backend
+kubectl get all -n frontend
+```
+
+### Deploy to Specific Environment
+
+```bash
+# Development environment (lower resources, debug logging)
+helm install dev k8s/personal/devops-app/ \
+  -f k8s/personal/devops-app/values-dev.yaml
+
+# Production environment (multiple replicas, specific versions)
+helm install prod k8s/personal/devops-app/ \
+  -f k8s/personal/devops-app/values-prod.yaml
+```
+
+### What's Deployed
+
+The Helm chart deploys:
+- **Backend API** (Go REST server) in `backend` namespace
+- **Frontend** (React app) in `frontend` namespace
+- **Consumer Workers** (3 background tasks) in `backend` namespace
+  - email-processor
+  - data-sync
+  - report-generator
+- **Ingress** routing for both frontend and backend
+- **Namespaces** automatically created
+
+### Common Operations
+
+```bash
+# Update backend image
+helm upgrade myapp k8s/personal/devops-app/ \
+  --set backend.image.tag=v1.2.3
+
+# Update frontend image
+helm upgrade myapp k8s/personal/devops-app/ \
+  --set frontend.image.tag=v2.0.0
+
+# Scale backend to 3 replicas
+helm upgrade myapp k8s/personal/devops-app/ \
+  --set backend.replicas=3
+
+# Rollback to previous version
+helm rollback myapp
+
+# Uninstall
+helm uninstall myapp
+```
+
+### Why Helm?
+
+**Before (Plain YAML):**
+- 10+ separate YAML files to manage
+- 340+ lines of repetitive code
+- Update image = edit 5+ files
+- Add consumer = copy/paste 44 lines
+- Environment configs = duplicate all files
+
+**After (Helm):**
+- 1 chart with templates and loops
+- ~100 effective lines of config
+- Update image = 1 command
+- Add consumer = 3 lines
+- Environment = different values file
+
+**Result: 10x simpler, 30x faster, infinitely easier to maintain!** 🚀
+
+### Charts Available
+
+#### 1. devops-app (Main Chart)
+Complete application stack - recommended for most use cases.
+
+```bash
+helm install myapp k8s/personal/devops-app/
+```
+
+[📖 Full Documentation](k8s/personal/devops-app/README.md)
+
+#### 2. consumer-chart (Standalone)
+Just the consumer workers, if needed separately.
+
+```bash
+helm install consumers k8s/personal/consumer-chart/ -n backend
+```
+
+[📖 Full Documentation](k8s/personal/consumer-chart/README.md)
+
+### Configuration
+
+All settings in one file: `k8s/personal/devops-app/values.yaml`
+
+```yaml
+# Enable/disable components
+components:
+  backend: true
+  frontend: true
+  consumers: true
+  ingress: true
+
+# Configure each component
+backend:
+  replicas: 1
+  image:
+    repository: khoanguyen2610/backend
+    tag: latest
+
+# Consumer tasks (with loop!)
+consumers:
+  tasks:
+    - name: email-processor
+      replicas: 1
+    - name: data-sync
+      replicas: 1
+    # Add more - just 3 lines!
+```
+
+### Kubernetes Documentation
+
+- [Main K8s README](k8s/personal/README.md) - Comprehensive guide
+- [Quick Reference](k8s/personal/QUICK-REFERENCE.md) - Command cheat sheet
+- [Helm Transformation](k8s/personal/HELM-TRANSFORMATION.md) - Before/after comparison
+- [Consumer Quick Start](k8s/personal/CONSUMER-QUICK-START.md) - Consumer tasks guide
 
 ## 🚢 CI/CD
 

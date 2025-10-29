@@ -1,8 +1,21 @@
-# Simple Go API
+# Simple Go API & Consumer Application
 
-A simple Go REST API with mock data endpoints.
+A simple Go REST API with mock data endpoints and a consumer application for background task processing.
 
-## Endpoints
+## Components
+
+### 1. API Server
+REST API with mock data endpoints for health checks and user data.
+
+### 2. Consumer Application
+Background task processor that runs three types of tasks:
+- **Email Processor**: Handles email operations (sending, filtering, categorizing, archiving)
+- **Data Sync**: Syncs data between systems (database, API, file storage, cache)
+- **Report Generator**: Generates various reports (daily, weekly, monthly, quarterly)
+
+See [Consumer Documentation](cmd/consumer/README.md) for detailed information.
+
+## API Endpoints
 
 ### Health Check
 - **GET** `/api/v1/health`
@@ -69,9 +82,11 @@ Response example:
 
 ## Build
 
-To build the executable:
+### Build API Server
 ```bash
-go build -o api-server main.go
+make build-api
+# or
+go build -o api-server .
 ```
 
 Then run:
@@ -79,24 +94,55 @@ Then run:
 ./api-server
 ```
 
+### Build Consumer Application
+```bash
+make build-consumer
+# or
+go build -o consumer ./cmd/consumer
+```
+
+Then run (specify task):
+```bash
+./consumer --task=email-processor
+./consumer --task=data-sync
+./consumer --task=report-generator
+```
+
+### Build All Applications
+```bash
+make build
+```
+
 ## Docker Deployment
 
 ### Using Docker
 
-Build the Docker image:
+Build Docker images:
 ```bash
-docker build -t go-api:latest .
+# Build API server image
+make docker-build-api
+
+# Build consumer image
+make docker-build-consumer
+
+# Build both
+make docker-build
 ```
 
-Run the container:
+Run containers:
 ```bash
-docker run -d --name go-api -p 8080:8080 go-api:latest
+# Run API server
+make docker-run
+
+# Run consumer tasks
+make docker-run-consumer-email
+make docker-run-consumer-data
+make docker-run-consumer-report
 ```
 
-Stop the container:
+Stop containers:
 ```bash
-docker stop go-api
-docker rm go-api
+make docker-stop
 ```
 
 ### Using Docker Compose
@@ -124,15 +170,34 @@ The project includes a Makefile for common tasks:
 # View all available commands
 make help
 
-# Local development
-make run              # Run locally
-make build            # Build binary
-make test             # Run tests
+# Local development - API Server
+make run                    # Run API server locally
+make build-api              # Build API server binary
+make test                   # Run tests
 
-# Docker commands
-make docker-build     # Build Docker image
-make docker-run       # Run container
-make docker-stop      # Stop container
+# Local development - Consumer
+make build-consumer         # Build consumer binary
+make run-consumer-email     # Run email-processor
+make run-consumer-data      # Run data-sync
+make run-consumer-report    # Run report-generator
+
+# Build all
+make build                  # Build both API and consumer
+
+# Docker commands - API
+make docker-build-api       # Build API Docker image
+make docker-run             # Run API container
+
+# Docker commands - Consumer
+make docker-build-consumer          # Build consumer Docker image
+make docker-run-consumer-email      # Run email-processor container
+make docker-run-consumer-data       # Run data-sync container
+make docker-run-consumer-report     # Run report-generator container
+
+# Docker commands - All
+make docker-build           # Build all Docker images
+make docker-stop            # Stop all containers
+make docker-clean           # Clean Docker images and containers
 
 # Docker Compose commands
 make docker-compose-up       # Start with docker-compose
@@ -180,18 +245,56 @@ docker-compose pull
 docker-compose up -d
 ```
 
+## Kubernetes Deployment
+
+The consumer tasks are designed to run as separate pods in Kubernetes. Each task has its own deployment file.
+
+### Deploy Consumer Tasks
+
+```bash
+# Deploy all consumer tasks at once
+cd ../k8s/personal
+./deploy-consumers.sh
+
+# Or deploy individually
+kubectl apply -f k8s/personal/consumer-email-processor.yaml
+kubectl apply -f k8s/personal/consumer-data-sync.yaml
+kubectl apply -f k8s/personal/consumer-report-generator.yaml
+```
+
+### Monitor Consumer Tasks
+
+```bash
+# View all consumer pods
+kubectl get pods -n backend -l app=consumer
+
+# View logs from specific task
+kubectl logs -n backend -l task=email-processor -f
+kubectl logs -n backend -l task=data-sync -f
+kubectl logs -n backend -l task=report-generator -f
+
+# View resource usage
+kubectl top pods -n backend -l app=consumer
+```
+
+See the [Consumer Documentation](cmd/consumer/README.md) for more details on Kubernetes deployment.
+
 ## Project Structure
 
 ```
 backend/
-├── main.go                           # Main application
+├── main.go                           # API server application
+├── cmd/
+│   └── consumer/
+│       ├── main.go                   # Consumer application
+│       └── README.md                 # Consumer documentation
 ├── go.mod                            # Go module definition
-├── Dockerfile                        # Docker image configuration
+├── Dockerfile                        # Multi-stage Docker build (API + Consumer)
 ├── docker-compose.yml                # Docker Compose configuration
 ├── .dockerignore                     # Docker ignore file
 ├── .github/workflows/docker-build.yml # GitHub Actions CI/CD
 ├── .gitlab-ci.yml                    # GitLab CI/CD
-├── Makefile                          # Common tasks
+├── Makefile                          # Common tasks for both API and Consumer
 └── README.md                         # This file
 ```
 
