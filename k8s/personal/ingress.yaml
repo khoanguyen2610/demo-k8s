@@ -13,7 +13,7 @@ metadata:
 spec:
   ingressClassName: nginx  # Change based on your ingress controller
   rules:
-  - host: kn-tech.click  # Update with your domain or use IP
+  - host: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com  # Update with your domain or use IP
     http:
       paths:
       - path: /
@@ -36,7 +36,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: kn-tech.click  # Same domain as frontend
+  - host: add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com  # Same domain as frontend
     http:
       paths:
       - path: /api
