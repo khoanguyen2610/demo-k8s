@@ -152,7 +152,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     environment:
       name: production
-      url: http://${{ secrets.K8S_DOMAIN }}
+      url: http://kn-tech.click
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

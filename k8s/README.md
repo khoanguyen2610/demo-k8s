@@ -76,15 +76,14 @@ helm install consumer-tasks k8s/helm/consumer-chart/ \
 
 The application is configured with the following domains:
 
-- **Frontend:** `kn-tech.click` → React App
-- **Backend API:** `api.kn-tech.click` → Go API (`/api/v1/...`)
+- **Frontend:** `http://kn-tech.click` → React App
+- **Backend API:** `http://api.kn-tech.click` → Go API (`/api/v1/...`)
 
 ### Ingress Configuration
 
 The ingress is configured with:
 - NGINX Ingress Controller
-- TLS/SSL certificates via cert-manager
-- Automatic HTTPS redirect (production)
+- HTTP protocol (no TLS/SSL)
 
 ## 📦 Components
 
