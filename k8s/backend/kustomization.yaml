@@ -7,5 +7,6 @@ resources:
   - base/namespace.yaml
   - base/deployment.yaml
   - base/service.yaml
-  - base/consumer-deployment.yaml
+  # Temporarily disabled - too many pods on single node
+  # - base/consumer-deployment.yaml
 
