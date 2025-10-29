@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: pubsub-in
+spec:
+ type: pubsub.redis
+ version: v1
+ metadata:
+  - name: redisHost
+    value: staging-vn-redis.x60gem.ng.0001.apse1.cache.amazonaws.com:6379
+  - name: maxLenApprox
+    value: 10000
+  - name: redisDB
+    value: 1
+scopes:
+  - logistic-app-in
+  - logistic-consumer-in
+  - logistic-eventbus-in
+auth:
+ secretStore: kubernetes

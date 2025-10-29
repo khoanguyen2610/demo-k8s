@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: frontend
+
+bases:
+  - ../base
+
+namePrefix: prod-
+
+commonLabels:
+  environment: production
+
+replicas:
+  - name: frontend-app
+    count: 3
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 256Mi
+  
+  - target:
+      kind: Ingress
+      name: frontend-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: kn-tech.click
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: kn-tech.click
+  
+  - target:
+      kind: Ingress
+      name: backend-api-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.kn-tech.click
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.kn-tech.click
+

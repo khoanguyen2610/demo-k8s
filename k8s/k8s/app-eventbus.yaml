@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventbus
+  namespace: ${KUBE_NAMESPACE}
+  labels:
+    name: app
+    tier: eventbus
+  annotations:
+    app.gitlab.com/app: ${CI_PROJECT_PATH_SLUG}
+    app.gitlab.com/env: ${CI_ENVIRONMENT_SLUG}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: app
+      tier: eventbus
+  template:
+    metadata:
+      labels:
+        name: app
+        tier: eventbus
+      annotations:
+        app.gitlab.com/app: ${CI_PROJECT_PATH_SLUG}
+        app.gitlab.com/env: ${CI_ENVIRONMENT_SLUG}
+        dapr.io/enabled: "true"
+        dapr.io/app-id: ${DAPR_EVENTBUS_ID}
+        dapr.io/enable-api-logging: "true"
+        dapr.io/app-port: "6003"
+    spec:
+      containers:
+        - name: app
+          image: $DOCKER_REGISTRY/$APP_NAME:$CI_COMMIT_SHA
+          args:
+            - /usr/local/bin/app/eventbus.sh
+          envFrom:
+            - configMapRef:
+                name: env
+            - secretRef:
+                name: logistics-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 100Mi
+          livenessProbe:
+            httpGet:
+              path: /health-check
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 300
+            timeoutSeconds: 5
+            failureThreshold: 6
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /health-check
+              port: 8080
+            initialDelaySeconds: 10
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: gitlab-registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eventbus
+  namespace: ${KUBE_NAMESPACE}
+  labels:
+    name: app
+    tier: eventbus
+spec:
+  ports:
+    - name: "8080"
+      port: 8080
+      targetPort: 8080
+  selector:
+    name: app
+    tier: eventbus

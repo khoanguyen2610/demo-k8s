@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-app
+  labels:
+    app: frontend-app
+    tier: frontend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: frontend-app
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend-app
+        tier: frontend
+    spec:
+      containers:
+      - name: frontend-app
+        image: khoanguyen2610/frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 150m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+

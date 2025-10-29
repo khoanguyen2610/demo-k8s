@@ -1,0 +1,102 @@
+name: Helm Chart Preview
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - 'k8s/helm/devops-app/**'
+      - 'k8s/helm/consumer-chart/**'
+      - 'k8s/backend/**'
+      - 'k8s/frontend/**'
+
+jobs:
+  lint-and-preview:
+    name: Lint and Preview Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Lint devops-app chart
+        run: |
+          echo "🔍 Linting devops-app chart..."
+          helm lint k8s/helm/devops-app/
+          echo "✅ devops-app chart is valid"
+
+      - name: Lint consumer-chart
+        run: |
+          echo "🔍 Linting consumer-chart..."
+          helm lint k8s/helm/consumer-chart/
+          echo "✅ consumer-chart is valid"
+
+      - name: Template devops-app chart
+        run: |
+          echo "📋 Generating devops-app manifests..."
+          helm template devops-app k8s/helm/devops-app/ \
+            --values k8s/helm/devops-app/values-dev.yaml \
+            > /tmp/devops-app-preview.yaml
+          echo "Generated manifest size: $(wc -l < /tmp/devops-app-preview.yaml) lines"
+
+      - name: Template consumer-chart
+        run: |
+          echo "📋 Generating consumer-chart manifests..."
+          helm template consumers k8s/helm/consumer-chart/ \
+            --values k8s/helm/consumer-chart/examples/values-dev.yaml \
+            > /tmp/consumer-chart-preview.yaml
+          echo "Generated manifest size: $(wc -l < /tmp/consumer-chart-preview.yaml) lines"
+
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "🔍 Validating Kubernetes manifests..."
+          
+          # Dry-run validation using kubectl from GitHub Actions
+          kubectl version --client
+          kubectl apply --dry-run=client -f /tmp/devops-app-preview.yaml
+          kubectl apply --dry-run=client -f /tmp/consumer-chart-preview.yaml
+          
+          echo "✅ All manifests are valid"
+
+      - name: Comment PR with preview
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const devopsApp = fs.readFileSync('/tmp/devops-app-preview.yaml', 'utf8');
+            const consumerChart = fs.readFileSync('/tmp/consumer-chart-preview.yaml', 'utf8');
+            
+            const comment = `## 📋 Helm Chart Preview
+            
+            ✅ All charts are valid and ready to deploy!
+            
+            ### devops-app Chart
+            - Lines: ${devopsApp.split('\n').length}
+            - Components: Backend, Frontend, Consumers, Ingress
+            
+            ### consumer-chart
+            - Lines: ${consumerChart.split('\n').length}
+            - Tasks: email-processor, data-sync, report-generator
+            
+            <details>
+            <summary>🔍 View generated manifests</summary>
+            
+            Generated manifests are too large to display here. Run locally:
+            \`\`\`bash
+            helm template devops-app k8s/helm/devops-app/
+            helm template consumers k8s/helm/consumer-chart/
+            \`\`\`
+            </details>
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+

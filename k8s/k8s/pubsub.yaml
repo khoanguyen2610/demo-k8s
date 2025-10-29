@@ -1,0 +1,18 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: ${DAPR_PUBSUB_NAME}
+spec:
+ type: pubsub.redis
+ version: v1
+ metadata:
+  - name: redisHost
+    value: redis-master.default:6379
+  - name: redisPassword
+    value: J5nwzDyc5j
+scopes:
+  - ${DAPR_APP_ID}
+  - ${DAPR_CONSUMER_ID}
+  - ${DAPR_EVENTBUS_ID}
+auth:
+ secretStore: kubernetes

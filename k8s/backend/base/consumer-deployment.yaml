@@ -1,0 +1,127 @@
+---
+# Email Processor Consumer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-email-processor
+  labels:
+    app: consumer
+    task: email-processor
+    tier: backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: consumer
+      task: email-processor
+  template:
+    metadata:
+      labels:
+        app: consumer
+        task: email-processor
+        tier: backend
+    spec:
+      containers:
+      - name: email-processor
+        image: khoanguyen2610/backend:consumer-latest
+        imagePullPolicy: Always
+        args:
+        - "--task=email-processor"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        env:
+        - name: TASK_NAME
+          value: "email-processor"
+        - name: ENV
+          value: "development"
+---
+# Data Sync Consumer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-data-sync
+  labels:
+    app: consumer
+    task: data-sync
+    tier: backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: consumer
+      task: data-sync
+  template:
+    metadata:
+      labels:
+        app: consumer
+        task: data-sync
+        tier: backend
+    spec:
+      containers:
+      - name: data-sync
+        image: khoanguyen2610/backend:consumer-latest
+        imagePullPolicy: Always
+        args:
+        - "--task=data-sync"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        env:
+        - name: TASK_NAME
+          value: "data-sync"
+        - name: ENV
+          value: "development"
+---
+# Report Generator Consumer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-report-generator
+  labels:
+    app: consumer
+    task: report-generator
+    tier: backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: consumer
+      task: report-generator
+  template:
+    metadata:
+      labels:
+        app: consumer
+        task: report-generator
+        tier: backend
+    spec:
+      containers:
+      - name: report-generator
+        image: khoanguyen2610/backend:consumer-latest
+        imagePullPolicy: Always
+        args:
+        - "--task=report-generator"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        env:
+        - name: TASK_NAME
+          value: "report-generator"
+        - name: ENV
+          value: "development"
+

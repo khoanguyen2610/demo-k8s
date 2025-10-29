@@ -1,33 +1,21 @@
-name: Build and Deploy
+name: Build and Deploy with Helm
 
 on:
   push:
-    branches: [ main, master, develop ]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'k8s/**'
-      - '.github/workflows/build-deploy.yml'
-  workflow_dispatch:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
 
 env:
-  REGISTRY: docker.io
-  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-  BACKEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/backend
-  FRONTEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/frontend
+  DOCKER_BACKEND_IMAGE: khoanguyen2610/backend
+  DOCKER_FRONTEND_IMAGE: khoanguyen2610/frontend
+  DOCKER_CONSUMER_IMAGE: khoanguyen2610/backend
+  HELM_VERSION: v3.13.0
 
 jobs:
-  build:
-    name: Build Images
+  build-backend:
+    name: Build Backend API
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    
-    strategy:
-      matrix:
-        service: [backend, frontend]
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,7 +23,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -45,197 +33,205 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}
+          images: ${{ env.DOCKER_BACKEND_IMAGE }}
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push ${{ matrix.service }} image
+      - name: Build and push Backend API
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.service }}
-          file: ./${{ matrix.service }}/Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    name: Deploy to Kubernetes
+  build-consumer:
+    name: Build Consumer Workers
     runs-on: ubuntu-latest
-    needs: build
-    if: |
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 
-      success()
-    environment:
-      name: production
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Check build status
-        run: |
-          echo "✅ Build job completed successfully"
-          echo "Images should be available in Docker Hub:"
-          echo "  - ${{ env.BACKEND_IMAGE }}:latest"
-          echo "  - ${{ env.FRONTEND_IMAGE }}:latest"
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          version: 'latest'
+          images: ${{ env.DOCKER_CONSUMER_IMAGE }}
+          flavor: |
+            suffix=-consumer,onlatest=true
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=consumer-latest,enable={{is_default_branch}}
 
-      - name: Configure kubectl for EKS
+      - name: Build and push Consumer
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: consumer
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    name: Build Frontend App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_FRONTEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test-backend:
+    name: Test Backend API
+    runs-on: ubuntu-latest
+    needs: build-backend
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Pull and test backend image
         run: |
-          # Update kubeconfig for EKS cluster
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
-          
-          # Verify connection
-          echo "Testing cluster connection..."
+          docker pull ${{ env.DOCKER_BACKEND_IMAGE }}:${{ github.ref_name }}-${{ github.sha }}
+          docker run -d --name test-api -p 8080:8080 ${{ env.DOCKER_BACKEND_IMAGE }}:${{ github.ref_name }}-${{ github.sha }}
+          sleep 5
+          curl -f http://localhost:8080/api/v1/health || exit 1
+          docker stop test-api
+          echo "✅ Backend health check passed"
+
+  deploy-helm:
+    name: Deploy to Kubernetes with Helm
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-consumer, build-frontend, test-backend]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment:
+      name: production
+      url: http://${{ secrets.K8S_DOMAIN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Verify kubectl connection
+        run: |
           kubectl cluster-info
           kubectl get nodes
 
-      - name: Create namespaces
+      - name: Lint Helm chart
         run: |
-          kubectl create namespace backend --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create namespace frontend --dry-run=client -o yaml | kubectl apply -f -
+          helm lint k8s/helm/devops-app/
 
-      - name: Verify images exist
+      - name: Deploy with Helm
         run: |
-          IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
-          
-          echo "🔍 Checking if images were built..."
-          echo "Looking for:"
-          echo "  - ${{ env.BACKEND_IMAGE }}:${IMAGE_TAG}"
-          echo "  - ${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG}"
-          
-          # For now, use latest tag for simplicity
-          # Once build is confirmed working, we can use SHA tags
-          USE_TAG="latest"
-          
-          echo ""
-          echo "📦 Using tag: ${USE_TAG}"
-          echo "  Backend:  ${{ env.BACKEND_IMAGE }}:${USE_TAG}"
-          echo "  Frontend: ${{ env.FRONTEND_IMAGE }}:${USE_TAG}"
-          
-      - name: Update image tags
-        run: |
-          USE_TAG="latest"
-          
-          # Update backend image
-          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}:${USE_TAG}|g" k8s/personal/backend-deployment.yaml
-          
-          # Update frontend image  
-          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}:${USE_TAG}|g" k8s/personal/frontend-deployment.yaml
-          
-          echo "✅ Updated deployment manifests"
-          echo ""
-          echo "=== Backend deployment image ==="
-          grep "image:.*backend" k8s/personal/backend-deployment.yaml
-          echo ""
-          echo "=== Frontend deployment image ==="
-          grep "image:.*frontend" k8s/personal/frontend-deployment.yaml
+          helm upgrade --install devops-app k8s/helm/devops-app/ \
+            --namespace default \
+            --create-namespace \
+            --set backend.image.tag=${{ github.ref_name }}-${{ github.sha }} \
+            --set frontend.image.tag=${{ github.ref_name }}-${{ github.sha }} \
+            --set consumers.image.tag=${{ github.ref_name }}-${{ github.sha }}-consumer \
+            --timeout 5m \
+            --wait
 
-      - name: Deploy backend
+      - name: Verify deployment
         run: |
-          kubectl apply -f k8s/personal/backend-deployment.yaml
+          echo "Checking deployment status..."
+          kubectl get deployments -n default
+          kubectl get pods -n default
           
-          echo "Waiting for backend deployment..."
-          if ! kubectl rollout status deployment/backend-api -n backend --timeout=5m; then
-            echo "❌ Backend deployment failed! Debugging..."
-            echo ""
-            echo "=== Pod Status ==="
-            kubectl get pods -n backend
-            echo ""
-            echo "=== Pod Details ==="
-            kubectl describe pods -n backend -l app=backend-api
-            echo ""
-            echo "=== Pod Logs ==="
-            kubectl logs -n backend -l app=backend-api --tail=50 || echo "No logs available"
-            echo ""
-            echo "=== Events ==="
-            kubectl get events -n backend --sort-by='.lastTimestamp' | tail -20
-            exit 1
-          fi
+          echo "Waiting for rollout to complete..."
+          kubectl rollout status deployment/backend-api -n default --timeout=300s
+          kubectl rollout status deployment/frontend-app -n default --timeout=300s
+          
+          echo "✅ Deployment successful!"
 
-      - name: Deploy frontend
+      - name: Get service URLs
         run: |
-          kubectl apply -f k8s/personal/frontend-deployment.yaml
-          
-          echo "Waiting for frontend deployment..."
-          if ! kubectl rollout status deployment/frontend-app -n frontend --timeout=5m; then
-            echo "❌ Frontend deployment failed! Debugging..."
-            echo ""
-            echo "=== Pod Status ==="
-            kubectl get pods -n frontend
-            echo ""
-            echo "=== Pod Details ==="
-            kubectl describe pods -n frontend -l app=frontend-app
-            echo ""
-            echo "=== Pod Logs ==="
-            kubectl logs -n frontend -l app=frontend-app --tail=50 || echo "No logs available"
-            echo ""
-            echo "=== Events ==="
-            kubectl get events -n frontend --sort-by='.lastTimestamp' | tail -20
-            exit 1
-          fi
+          echo "📋 Deployment Information:"
+          echo "=========================="
+          kubectl get ingress -n default
+          kubectl get services -n default
 
-      - name: Verify deployments
-        run: |
-          echo "=== Backend Status ==="
-          kubectl get pods -n backend
-          kubectl get svc -n backend
-          
-          echo ""
-          echo "=== Frontend Status ==="
-          kubectl get pods -n frontend
-          kubectl get svc -n frontend
-          
-          echo ""
-          echo "✅ Deployment complete!"
-
-  rollback:
+  rollback-on-failure:
     name: Rollback on Failure
     runs-on: ubuntu-latest
-    needs: deploy
-    if: failure()
-    environment:
-      name: production
-    
+    needs: deploy-helm
+    if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Install Helm
+        uses: azure/setup-helm@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          version: ${{ env.HELM_VERSION }}
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
         with:
-          version: 'latest'
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
 
-      - name: Configure kubectl for EKS
+      - name: Rollback Helm release
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
+          echo "⚠️  Deployment failed! Rolling back..."
+          helm rollback devops-app -n default
+          echo "✅ Rollback completed"
 
-      - name: Rollback deployments
+      - name: Notify failure
         run: |
-          echo "Rolling back backend..."
-          kubectl rollout undo deployment/backend-api -n backend || echo "Backend rollback failed or not needed"
-          
-          echo "Rolling back frontend..."
-          kubectl rollout undo deployment/frontend-app -n frontend || echo "Frontend rollback failed or not needed"
-          
-          echo "⚠️ Deployment rolled back due to failure"
-
+          echo "❌ Deployment failed and was rolled back"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"

@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+ name: gitlab-logistics-30533267-staging
+ namespace: logistics-india-staging
+roleRef:
+ apiGroup: rbac.authorization.k8s.io
+ kind: ClusterRole
+ name: admin
+subjects:
+ - kind: ServiceAccount
+   name: logistics-30533267-staging-service-account
+   namespace: logistics-30533267-staging
+

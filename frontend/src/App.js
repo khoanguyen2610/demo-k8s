@@ -7,12 +7,12 @@ function App() {
   const [error, setError] = useState(null);
   const [health, setHealth] = useState(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://api.kn-tech.click';
 
   // Fetch health status
   const fetchHealth = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/health`);
+      const response = await fetch(`${API_BASE_URL}/v1/health`);
       if (!response.ok) throw new Error('Health check failed');
       const data = await response.json();
       setHealth(data);
@@ -26,7 +26,7 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/users`);
+      const response = await fetch(`${API_BASE_URL}/v1/users`);
       if (!response.ok) throw new Error('Failed to fetch users');
       const data = await response.json();
       setUsers(data.users || []);
