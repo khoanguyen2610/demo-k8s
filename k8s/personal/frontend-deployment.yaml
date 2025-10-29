@@ -1,5 +1,3 @@
-# No ConfigMap needed - React dev server handles everything
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -62,7 +60,7 @@ metadata:
     app: frontend-app
     tier: frontend
 spec:
-  type: NodePort  # Free tier friendly - use port-forward for local access
+  type: NodePort
   selector:
     app: frontend-app
     tier: frontend
@@ -72,4 +70,3 @@ spec:
     protocol: TCP
     name: http
   sessionAffinity: None
-
