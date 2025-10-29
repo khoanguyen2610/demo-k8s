@@ -140,6 +140,14 @@ jobs:
           kubectl get nodes
           echo "✅ Connected successfully"
 
+      - name: Clean up old consumer deployments
+        run: |
+          echo "🧹 Cleaning up old consumer deployments with immutable selectors..."
+          kubectl delete deployment consumer-data-sync -n backend --ignore-not-found=true
+          kubectl delete deployment consumer-email-processor -n backend --ignore-not-found=true
+          kubectl delete deployment consumer-report-generator -n backend --ignore-not-found=true
+          echo "✅ Old consumer deployments removed"
+
       - name: Deploy Backend
         run: |
           echo "🚀 Deploying backend..."
@@ -156,17 +164,17 @@ jobs:
         run: |
           echo "🚀 Deploying consumers..."
           
-          # Update all consumer deployments
-          kubectl set image deployment/email-processor-consumer \
-            consumer=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
+          # Update all consumer deployments with correct names
+          kubectl set image deployment/consumer-email-processor \
+            email-processor=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
             -n backend || true
           
-          kubectl set image deployment/data-sync-consumer \
-            consumer=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
+          kubectl set image deployment/consumer-data-sync \
+            data-sync=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
             -n backend || true
           
-          kubectl set image deployment/report-generator-consumer \
-            consumer=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
+          kubectl set image deployment/consumer-report-generator \
+            report-generator=${{ env.CONSUMER_IMAGE }}:${{ github.sha }} \
             -n backend || true
           
           echo "✅ Consumers deployment applied"
@@ -194,9 +202,9 @@ jobs:
           kubectl rollout status deployment/frontend-app -n frontend --timeout=300s
           
           # Wait for consumers (optional, don't fail if not exist)
-          kubectl rollout status deployment/email-processor-consumer -n backend --timeout=300s || true
-          kubectl rollout status deployment/data-sync-consumer -n backend --timeout=300s || true
-          kubectl rollout status deployment/report-generator-consumer -n backend --timeout=300s || true
+          kubectl rollout status deployment/consumer-email-processor -n backend --timeout=300s || true
+          kubectl rollout status deployment/consumer-data-sync -n backend --timeout=300s || true
+          kubectl rollout status deployment/consumer-report-generator -n backend --timeout=300s || true
           
           echo "✅ All deployments completed successfully!"
 
