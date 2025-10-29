@@ -23,9 +23,14 @@ kind: Ingress
 metadata:
   name: backend-api-ingress
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.kn-tech.click
+    secretName: api-kn-tech-click-tls
   rules:
   - host: api.kn-tech.click
     http:
