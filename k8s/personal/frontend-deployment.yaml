@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: frontend-app
-        image: ghcr.io/YOUR_GITHUB_USERNAME/devops/frontend:latest  # Updated by CI/CD
+        image: khoanguyen2610/frontend:latest  # Updated by CI/CD
         imagePullPolicy: Always
         ports:
         - containerPort: 80

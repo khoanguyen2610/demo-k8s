@@ -206,11 +206,15 @@ Simple GitHub Actions CI/CD pipeline that builds and deploys both backend and fr
 ### 🚀 Quick Setup
 
 ```bash
-# Set GitHub secrets for AWS
+# Set GitHub secrets for AWS EKS
 gh secret set AWS_ACCESS_KEY_ID
 gh secret set AWS_SECRET_ACCESS_KEY
 gh secret set AWS_REGION
 gh secret set EKS_CLUSTER_NAME
+
+# Set Docker Hub credentials
+gh secret set DOCKER_USERNAME
+gh secret set DOCKER_PASSWORD
 
 # Push and deploy automatically
 git push origin main
@@ -222,21 +226,20 @@ gh run watch
 **Single Workflow:** `.github/workflows/build-deploy.yml`
 
 - 🐳 Parallel Docker builds (backend + frontend)
-- 📦 Push to GitHub Container Registry
+- 📦 Push to Docker Hub
 - ☸️ Deploy to AWS EKS
 - ✅ Verify deployments
 - ↩️ Automatic rollback on failure
 
 ### 📦 Container Registry
 
-Images are automatically built and pushed to **GitHub Container Registry (GHCR)**:
-- `ghcr.io/your-username/devops/backend:latest`
-- `ghcr.io/your-username/devops/frontend:latest`
+Images are automatically built and pushed to **Docker Hub**:
+- `khoanguyen2610/backend:latest`
+- `khoanguyen2610/frontend:latest`
 
 Tagged with:
 - Branch name (e.g., `main`, `develop`)
 - Git SHA (e.g., `main-abc123`)
-- Semantic versions (e.g., `v1.0.0`, `1.0`)
 
 ### 🔐 Required GitHub Secrets
 
@@ -246,6 +249,8 @@ Tagged with:
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key |
 | `AWS_REGION` | AWS region (e.g., us-east-1) |
 | `EKS_CLUSTER_NAME` | Your EKS cluster name |
+| `DOCKER_USERNAME` | Docker Hub username |
+| `DOCKER_PASSWORD` | Docker Hub password/token |
 
 ### 🎯 How It Works
 

@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: backend-api
-        image: ghcr.io/YOUR_GITHUB_USERNAME/devops/backend:latest  # Updated by CI/CD
+        image: khoanguyen2610/backend:latest  # Updated by CI/CD
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
