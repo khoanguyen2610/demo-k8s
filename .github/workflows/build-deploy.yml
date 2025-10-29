@@ -117,10 +117,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure kubectl
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
         run: |
+          # Check if KUBECONFIG secret exists
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "❌ ERROR: KUBECONFIG secret is not set!"
+            echo ""
+            echo "Please set it using:"
+            echo "  kubectl config view --flatten --minify > kubeconfig.yaml"
+            echo "  cat kubeconfig.yaml | base64 | gh secret set KUBECONFIG"
+            echo ""
+            exit 1
+          fi
+          
+          # Create .kube directory
           mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          
+          # Decode and save kubeconfig
+          echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
+          
+          # Verify it's valid YAML
+          if ! grep -q "apiVersion" $HOME/.kube/config; then
+            echo "❌ ERROR: Invalid kubeconfig format!"
+            echo "The decoded content is not a valid kubeconfig file."
+            exit 1
+          fi
+          
           chmod 600 $HOME/.kube/config
+          echo "✅ Kubeconfig configured successfully"
 
       - name: Verify cluster connection
         run: |
