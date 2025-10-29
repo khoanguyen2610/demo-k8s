@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: email-processor
-        image: khoanguyen2610/backend:consumer-latest
+        image: khoanguyen2610/consumer:latest
         imagePullPolicy: Always
         args:
         - "--task=email-processor"
@@ -66,7 +66,7 @@ spec:
     spec:
       containers:
       - name: data-sync
-        image: khoanguyen2610/backend:consumer-latest
+        image: khoanguyen2610/consumer:latest
         imagePullPolicy: Always
         args:
         - "--task=data-sync"
@@ -108,7 +108,7 @@ spec:
     spec:
       containers:
       - name: report-generator
-        image: khoanguyen2610/backend:consumer-latest
+        image: khoanguyen2610/consumer:latest
         imagePullPolicy: Always
         args:
         - "--task=report-generator"
