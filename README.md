@@ -199,65 +199,33 @@ The frontend Nginx server proxies `/api/*` requests to the backend, enabling sea
 
 ## 🚢 CI/CD
 
-![Backend CI/CD](https://github.com/YOUR_USERNAME/devops/actions/workflows/backend-cicd.yml/badge.svg)
-![Frontend CI/CD](https://github.com/YOUR_USERNAME/devops/actions/workflows/frontend-cicd.yml/badge.svg)
+![Build and Deploy](https://github.com/YOUR_USERNAME/devops/actions/workflows/build-deploy.yml/badge.svg)
 
-This project includes comprehensive GitHub Actions CI/CD pipelines for automated testing, building, and deployment to Kubernetes.
+Simple GitHub Actions CI/CD pipeline that builds and deploys both backend and frontend to AWS EKS.
 
 ### 🚀 Quick Setup
 
-Get your CI/CD pipeline running in 5 minutes:
-
 ```bash
-# Run the automated setup script
-./scripts/setup-github-secrets.sh
+# Set GitHub secrets for AWS
+gh secret set AWS_ACCESS_KEY_ID
+gh secret set AWS_SECRET_ACCESS_KEY
+gh secret set AWS_REGION
+gh secret set EKS_CLUSTER_NAME
 
-# Test locally before pushing
-./scripts/local-test.sh
-
-# Push and watch the magic happen
+# Push and deploy automatically
 git push origin main
 gh run watch
 ```
 
-📖 **[Quick Start Guide →](QUICKSTART_CICD.md)**
-
 ### 📋 What's Included
 
-**Three GitHub Actions Workflows:**
+**Single Workflow:** `.github/workflows/build-deploy.yml`
 
-1. **Backend CI/CD** (`.github/workflows/backend-cicd.yml`)
-   - ✅ Go tests with coverage
-   - 🔍 golangci-lint static analysis
-   - 🐳 Multi-platform Docker builds (amd64, arm64)
-   - 🔒 Trivy security scanning
-   - 🚀 Automated Kubernetes deployment
-   - ↩️ Automatic rollback on failure
-
-2. **Frontend CI/CD** (`.github/workflows/frontend-cicd.yml`)
-   - ✅ React/Jest tests with coverage
-   - 🔍 ESLint code quality checks
-   - 📦 Production build optimization
-   - 🐳 Multi-platform Docker builds
-   - 🔒 Trivy security scanning
-   - 🚀 Automated Kubernetes deployment
-   - ↩️ Automatic rollback on failure
-
-3. **Full Stack Deployment** (`.github/workflows/deploy-stack.yml`)
-   - 🎯 Manual workflow dispatch
-   - 🔄 Deploy both services together
-   - 🏷️ Support for specific image tags
-   - 🔍 Comprehensive health checks
-   - 📊 Deployment summary
-
-**PR Checks Workflow:**
-- 📝 PR title validation (semantic commits)
-- 🔍 File change detection
-- ⚠️ Sensitive file scanning
-- 🐛 Backend/Frontend linting and tests
-- ☸️ Kubernetes manifest validation
-- 🔒 Security scanning
-- 📏 PR size checking
+- 🐳 Parallel Docker builds (backend + frontend)
+- 📦 Push to GitHub Container Registry
+- ☸️ Deploy to AWS EKS
+- ✅ Verify deployments
+- ↩️ Automatic rollback on failure
 
 ### 📦 Container Registry
 
@@ -270,185 +238,40 @@ Tagged with:
 - Git SHA (e.g., `main-abc123`)
 - Semantic versions (e.g., `v1.0.0`, `1.0`)
 
-### 🔐 Required Secrets
+### 🔐 Required GitHub Secrets
 
-Set up in `Settings > Secrets and variables > Actions`:
-
-| Secret | Required | Description |
-|--------|----------|-------------|
-| `KUBECONFIG` | ✅ Yes | Base64-encoded Kubernetes config |
-| `REACT_APP_API_URL` | ❌ No | Backend API URL for frontend |
-| `DOCKER_USERNAME` | ❌ No | Docker Hub username (if not using GHCR) |
-| `DOCKER_PASSWORD` | ❌ No | Docker Hub password (if not using GHCR) |
-
-Use the setup script for easy configuration:
-```bash
-./scripts/setup-github-secrets.sh
-```
+| Secret | Description |
+|--------|-------------|
+| `AWS_ACCESS_KEY_ID` | AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
+| `AWS_REGION` | AWS region (e.g., us-east-1) |
+| `EKS_CLUSTER_NAME` | Your EKS cluster name |
 
 ### 🎯 How It Works
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  Developer pushes to main/develop                             │
-└──────────────┬───────────────────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────────────────────┐
-│  GitHub Actions Triggers (path-based)                         │
-├──────────────────────────────────────────────────────────────┤
-│  • backend/** → Backend CI/CD                                 │
-│  • frontend/** → Frontend CI/CD                               │
-└──────────────┬───────────────────────────────────────────────┘
-               │
-               ├──► Test & Lint ──► Build Docker ──► Security Scan ──┐
-               │                                                       │
-               └───────────────────────────────────────────────────┬─┘
-                                                                    │
-                                                                    ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Deploy to Kubernetes                                             │
-├──────────────────────────────────────────────────────────────────┤
-│  • Update deployment with new image                              │
-│  • Wait for rollout completion                                   │
-│  • Run health checks                                             │
-│  • ✅ Success or ↩️ Automatic rollback                           │
-└──────────────────────────────────────────────────────────────────┘
+Push Code → Build (Parallel) → Deploy to EKS → Verify → ✅ Done
+              ├─ Backend                          ↓
+              └─ Frontend                    Auto Rollback (if fails)
 ```
 
-### 🛠️ Helper Scripts
+### 🛠️ Helper Script
 
-Located in `scripts/`:
+- `scripts/verify-deployment.sh` - Verify deployment health after deploy
 
-| Script | Purpose |
-|--------|---------|
-| `setup-github-secrets.sh` | Interactive GitHub secrets configuration |
-| `local-test.sh` | Test everything locally before pushing |
-| `verify-deployment.sh` | Verify Kubernetes deployment health |
-
-### 📚 Documentation
-
-- 📖 **[Quick Start Guide](QUICKSTART_CICD.md)** - Get started in 5 minutes
-- 📘 **[Complete CI/CD Setup](.github/CICD_SETUP.md)** - Detailed documentation
-- 📝 **[PR Template](.github/pull_request_template.md)** - Standard PR format
-
-### 🚦 CI/CD Status
-
-View workflow status and logs:
+### 📊 Monitor Deployment
 
 ```bash
-# View all workflows
-gh workflow list
-
-# View recent runs
-gh run list
-
-# Watch current run
+# Watch workflow
 gh run watch
 
-# View logs
-gh run view <run-id> --log
-```
-
-Or visit: `https://github.com/YOUR_USERNAME/devops/actions`
-
-### 🔄 Manual Deployment
-
-Deploy manually using GitHub Actions UI or CLI:
-
-```bash
-# Deploy full stack
-gh workflow run deploy-stack.yml \
-  --field environment=production \
-  --field backend_image_tag=latest \
-  --field frontend_image_tag=latest
-```
-
-### 📊 Verify Deployment
-
-After deployment, verify everything is healthy:
-
-```bash
-# Run verification script
+# Verify deployment
 ./scripts/verify-deployment.sh
 
-# Or manually check
+# Check pods
 kubectl get pods -n backend
 kubectl get pods -n frontend
-kubectl get svc --all-namespaces
 ```
-
-### 🔧 Local Testing
-
-Test your changes locally before pushing:
-
-```bash
-# Run comprehensive local tests
-./scripts/local-test.sh
-
-# This will:
-# - Run backend tests and linting
-# - Run frontend tests and builds
-# - Test Docker builds locally
-# - Validate Kubernetes manifests
-# - Check for common issues
-```
-
-### 🎓 Best Practices
-
-- ✅ Always test locally before pushing (`./scripts/local-test.sh`)
-- ✅ Use meaningful commit messages (follows semantic commit format)
-- ✅ Monitor CI/CD runs after pushing (`gh run watch`)
-- ✅ Review security scan results in GitHub Security tab
-- ✅ Use PR template for consistent pull requests
-- ✅ Verify deployments with health checks (`./scripts/verify-deployment.sh`)
-
-### 🆘 Troubleshooting CI/CD
-
-Common issues and solutions:
-
-**Pipeline fails with "KUBECONFIG not found"**
-```bash
-./scripts/setup-github-secrets.sh
-```
-
-**Docker image push fails**
-- Enable GHCR in repository settings (see [Quick Start](QUICKSTART_CICD.md))
-
-**Deployment timeout**
-```bash
-kubectl describe pod -n backend <pod-name>
-kubectl logs -n backend deployment/backend-api
-```
-
-See [Complete Troubleshooting Guide](.github/CICD_SETUP.md#troubleshooting)
-
-### 📈 Features
-
-- 🚀 Automated testing and deployment
-- 🐳 Multi-platform Docker builds
-- 🔒 Security scanning with Trivy
-- 📊 Code coverage reporting
-- ↩️ Automatic rollback on failure
-- 🎯 Path-based workflow triggers
-- 🏷️ Semantic versioning support
-- 📝 PR validation and checks
-- 🔍 Comprehensive health checks
-
-### GitLab CI (Legacy)
-
-If you prefer GitLab CI, configurations are also available:
-- `backend/.gitlab-ci.yml` - GitLab CI for backend
-- Build → Test → Deploy pipeline
-- Manual production deployment
-
----
-
-**Next Steps:**
-1. 📖 Read the [Quick Start Guide](QUICKSTART_CICD.md)
-2. 🔐 Run `./scripts/setup-github-secrets.sh`
-3. 🧪 Test locally with `./scripts/local-test.sh`
-4. 🚀 Push and watch your deployment!
 
 ## 📊 Monitoring
 
