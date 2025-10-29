@@ -40,9 +40,9 @@ func main() {
 	// Set random seed
 	rand.Seed(time.Now().UnixNano())
 
-	// Setup routes
-	http.HandleFunc("/api/v1/health", healthHandler)
-	http.HandleFunc("/api/v1/users", usersHandler)
+	// Setup routes with CORS
+	http.HandleFunc("/api/v1/health", corsMiddleware(healthHandler))
+	http.HandleFunc("/api/v1/users", corsMiddleware(usersHandler))
 
 	// Start server
 	port := ":8080"
@@ -53,6 +53,25 @@ func main() {
 
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// CORS middleware to allow cross-origin requests
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Allow all origins (for development/demo)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Call the next handler
+		next(w, r)
 	}
 }
 
