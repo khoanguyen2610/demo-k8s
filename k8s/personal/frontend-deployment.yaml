@@ -27,9 +27,6 @@ spec:
         - containerPort: 3000
           name: http
           protocol: TCP
-        env:
-        - name: REACT_APP_API_URL
-          value: "http://add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com"
         resources:
           requests:
             cpu: 50m

@@ -7,7 +7,7 @@ function App() {
   const [error, setError] = useState(null);
   const [health, setHealth] = useState(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://add028c43610442de9fe7aac33dc601d-629592594.ap-southeast-1.elb.amazonaws.com';
 
   // Fetch health status
   const fetchHealth = async () => {
