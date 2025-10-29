@@ -1,63 +1,42 @@
-name: Helm Chart Preview
+name: Kubernetes Config Preview
 
 on:
   pull_request:
     branches: [main, master, develop]
     paths:
-      - 'k8s/helm/devops-app/**'
-      - 'k8s/helm/consumer-chart/**'
       - 'k8s/backend/**'
       - 'k8s/frontend/**'
 
 jobs:
-  lint-and-preview:
-    name: Lint and Preview Helm Charts
+  validate-kustomize:
+    name: Validate Kubernetes Configurations
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: v3.13.0
-
-      - name: Lint devops-app chart
+      - name: Build backend kustomization
         run: |
-          echo "🔍 Linting devops-app chart..."
-          helm lint k8s/helm/devops-app/
-          echo "✅ devops-app chart is valid"
+          echo "🔍 Building backend kustomization..."
+          kubectl kustomize k8s/backend/ > /tmp/backend-preview.yaml
+          echo "Generated manifest size: $(wc -l < /tmp/backend-preview.yaml) lines"
+          echo "✅ Backend kustomization is valid"
 
-      - name: Lint consumer-chart
+      - name: Build frontend kustomization
         run: |
-          echo "🔍 Linting consumer-chart..."
-          helm lint k8s/helm/consumer-chart/
-          echo "✅ consumer-chart is valid"
-
-      - name: Template devops-app chart
-        run: |
-          echo "📋 Generating devops-app manifests..."
-          helm template devops-app k8s/helm/devops-app/ \
-            --values k8s/helm/devops-app/values-dev.yaml \
-            > /tmp/devops-app-preview.yaml
-          echo "Generated manifest size: $(wc -l < /tmp/devops-app-preview.yaml) lines"
-
-      - name: Template consumer-chart
-        run: |
-          echo "📋 Generating consumer-chart manifests..."
-          helm template consumers k8s/helm/consumer-chart/ \
-            --values k8s/helm/consumer-chart/examples/values-dev.yaml \
-            > /tmp/consumer-chart-preview.yaml
-          echo "Generated manifest size: $(wc -l < /tmp/consumer-chart-preview.yaml) lines"
+          echo "🔍 Building frontend kustomization..."
+          kubectl kustomize k8s/frontend/ > /tmp/frontend-preview.yaml
+          echo "Generated manifest size: $(wc -l < /tmp/frontend-preview.yaml) lines"
+          echo "✅ Frontend kustomization is valid"
 
       - name: Validate Kubernetes manifests
         run: |
           echo "🔍 Validating Kubernetes manifests..."
           
-          # Dry-run validation using kubectl from GitHub Actions
+          # Dry-run validation using kubectl
           kubectl version --client
-          kubectl apply --dry-run=client -f /tmp/devops-app-preview.yaml
-          kubectl apply --dry-run=client -f /tmp/consumer-chart-preview.yaml
+          kubectl apply --dry-run=client -f /tmp/backend-preview.yaml
+          kubectl apply --dry-run=client -f /tmp/frontend-preview.yaml
           
           echo "✅ All manifests are valid"
 
@@ -67,30 +46,58 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const devopsApp = fs.readFileSync('/tmp/devops-app-preview.yaml', 'utf8');
-            const consumerChart = fs.readFileSync('/tmp/consumer-chart-preview.yaml', 'utf8');
+            const backendManifest = fs.readFileSync('/tmp/backend-preview.yaml', 'utf8');
+            const frontendManifest = fs.readFileSync('/tmp/frontend-preview.yaml', 'utf8');
             
-            const comment = `## 📋 Helm Chart Preview
+            const comment = `## 🎯 Kubernetes Configuration Preview
             
-            ✅ All charts are valid and ready to deploy!
+            ### ✅ Validation Results
+            - **Backend kustomization**: ✅ Valid
+            - **Frontend kustomization**: ✅ Valid
+            - **Kubernetes dry-run**: ✅ Passed
             
-            ### devops-app Chart
-            - Lines: ${devopsApp.split('\n').length}
-            - Components: Backend, Frontend, Consumers, Ingress
+            ### 📋 Generated Manifests
             
-            ### consumer-chart
-            - Lines: ${consumerChart.split('\n').length}
-            - Tasks: email-processor, data-sync, report-generator
+            #### Backend
+            - Lines: ${backendManifest.split('\n').length}
+            - Components: API Server, 3x Consumer Workers
+            - Namespace: backend
+            
+            #### Frontend
+            - Lines: ${frontendManifest.split('\n').length}
+            - Components: React App, Ingress
+            - Namespace: frontend
             
             <details>
-            <summary>🔍 View generated manifests</summary>
+            <summary>🔍 View backend manifests preview (first 50 lines)</summary>
             
-            Generated manifests are too large to display here. Run locally:
-            \`\`\`bash
-            helm template devops-app k8s/helm/devops-app/
-            helm template consumers k8s/helm/consumer-chart/
+            \`\`\`yaml
+            ${backendManifest.split('\n').slice(0, 50).join('\n')}
+            ${backendManifest.split('\n').length > 50 ? '... (truncated)' : ''}
             \`\`\`
             </details>
+            
+            <details>
+            <summary>🔍 View frontend manifests preview (first 50 lines)</summary>
+            
+            \`\`\`yaml
+            ${frontendManifest.split('\n').slice(0, 50).join('\n')}
+            ${frontendManifest.split('\n').length > 50 ? '... (truncated)' : ''}
+            \`\`\`
+            </details>
+            
+            ### 🚀 Deploy Commands
+            
+            \`\`\`bash
+            # Deploy backend
+            kubectl apply -k k8s/backend/
+            
+            # Deploy frontend
+            kubectl apply -k k8s/frontend/
+            
+            # Deploy everything
+            kubectl apply -k k8s/backend/ && kubectl apply -k k8s/frontend/
+            \`\`\`
             `;
             
             github.rest.issues.createComment({
@@ -99,4 +106,3 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
-

@@ -1,6 +1,6 @@
 # GitHub Actions Workflows
 
-This directory contains GitHub Actions workflows for building, testing, and deploying the application using Helm.
+This directory contains GitHub Actions workflows for building, testing, and deploying the application using Kustomize.
 
 ## Workflows
 
@@ -12,32 +12,30 @@ This directory contains GitHub Actions workflows for building, testing, and depl
 - `build-backend` - Build and push backend API Docker image
 - `build-consumer` - Build and push consumer workers Docker image
 - `build-frontend` - Build and push frontend Docker image
-- `deploy-helm` - Deploy to Kubernetes using Helm (main/master only)
+- `deploy-k8s` - Deploy to Kubernetes using Kustomize (main/master only)
 - `rollback-on-failure` - Automatic rollback if deployment fails
 
 **Features:**
 - ✅ Parallel builds for faster CI/CD
 - ✅ Docker layer caching (GitHub Actions cache)
 - ✅ Automatic tagging (branch, SHA, latest)
-- ✅ Helm-based deployment
+- ✅ Kustomize-based deployment
 - ✅ Automatic rollback on failure
 - ✅ Environment protection for production
 
 ### 2. helm-preview.yml (PR Validation)
 
-**Trigger:** Pull requests that modify Helm charts or K8s configs
+**Trigger:** Pull requests that modify K8s configs
 
 **Paths Watched:**
-- `k8s/helm/devops-app/**`
-- `k8s/helm/consumer-chart/**`
 - `k8s/backend/**`
 - `k8s/frontend/**`
 
 **Jobs:**
-- `lint-and-preview` - Lint charts, generate manifests, validate resources, comment on PR
+- `validate-kustomize` - Build kustomizations, validate manifests, comment on PR
 
 **Features:**
-- ✅ Helm chart linting
+- ✅ Kustomize build validation
 - ✅ Manifest generation preview
 - ✅ Kubernetes resource validation (dry-run)
 - ✅ Automated PR comments with results
@@ -56,19 +54,18 @@ Add these secrets in your GitHub repository settings:
 | Secret | Description |
 |--------|-------------|
 | `KUBECONFIG` | Base64 encoded kubeconfig file for your cluster |
-| `K8S_DOMAIN` | Your Kubernetes ingress domain (optional, for display) |
 
 ## Setup Instructions
 
 ### 1. Get Kubeconfig
 
 ```bash
-# For AWS EKS
-aws eks --region <region> update-kubeconfig --name <cluster-name>
+# For your Kubernetes cluster
+kubectl config view --flatten --minify > kubeconfig.yaml
 
 # Encode kubeconfig for GitHub secret
-cat ~/.kube/config | base64 -w 0  # Linux
-cat ~/.kube/config | base64        # macOS
+cat kubeconfig.yaml | base64 -w 0  # Linux
+cat kubeconfig.yaml | base64        # macOS
 ```
 
 ### 2. Add Secrets to GitHub
@@ -78,7 +75,6 @@ cat ~/.kube/config | base64        # macOS
 gh secret set DOCKER_USERNAME
 gh secret set DOCKER_PASSWORD
 gh secret set KUBECONFIG
-gh secret set K8S_DOMAIN
 
 # Or via GitHub UI:
 # Repository → Settings → Secrets and variables → Actions → New repository secret
@@ -86,222 +82,190 @@ gh secret set K8S_DOMAIN
 
 ### 3. Configure Environment Protection (Optional)
 
-For production deployments:
-1. Go to Repository → Settings → Environments
-2. Create environment: `production`
+For production environment:
+1. Go to Settings → Environments → New environment
+2. Name it "production"
 3. Add protection rules:
    - Required reviewers
    - Wait timer
    - Deployment branches (main/master only)
 
-## Workflow Behavior
+## Workflow Details
 
-### On Push to main/master
-1. Build all Docker images in parallel
-2. Test backend health endpoint
-3. Deploy to production using Helm
-4. Verify deployment
-5. Auto-rollback if deployment fails
+### Build & Deploy Workflow
 
-### On Push to develop
-1. Build all Docker images
-2. Test backend health endpoint
-3. No deployment (build only)
+```yaml
+Trigger: Push to main/master/develop, PRs
 
-### On Pull Request
-1. Lint Helm charts
-2. Generate manifest preview
-3. Validate Kubernetes resources
-4. Comment on PR with results
-
-## Helm Deployment Command
-
-The workflow uses this Helm command:
-
-```bash
-helm upgrade --install devops-app k8s/helm/devops-app/ \
-  --namespace default \
-  --create-namespace \
-  --set backend.image.tag=main-abc123 \
-  --set frontend.image.tag=main-abc123 \
-  --set consumers.image.tag=main-abc123-consumer \
-  --timeout 5m \
-  --wait
+Flow:
+  1. Build Images (Parallel)
+     ├─ Backend API
+     ├─ Consumer Workers
+     └─ Frontend App
+  
+  2. Deploy to Kubernetes (main/master only)
+     ├─ Apply backend kustomization
+     ├─ Apply frontend kustomization
+     ├─ Update image tags
+     └─ Wait for rollout
+  
+  3. Rollback (if deploy fails)
+     └─ Undo all deployments
 ```
 
-## Image Tagging Strategy
+**Image Tags:**
+- Branch + SHA: `main-abc123` (for tracking)
+- Latest: `latest` (for quick reference)
+- Consumer: `main-abc123-consumer` (separate tag)
 
-| Branch | Backend Tag | Consumer Tag | Frontend Tag |
-|--------|------------|--------------|--------------|
-| main | `latest`, `main-SHA` | `consumer-latest`, `main-SHA-consumer` | `latest`, `main-SHA` |
-| develop | `develop-SHA` | `develop-SHA-consumer` | `develop-SHA` |
-| feature/* | `feature-*-SHA` | `feature-*-SHA-consumer` | `feature-*-SHA` |
+### PR Preview Workflow
+
+```yaml
+Trigger: PR modifying k8s/backend/** or k8s/frontend/**
+
+Flow:
+  1. Build kustomizations
+  2. Validate manifests (dry-run)
+  3. Comment on PR with:
+     - Validation results
+     - Manifest previews
+     - Deploy commands
+```
+
+## Deployment Process
+
+When you push to `main` or `master`:
+
+1. **Build Phase** (~3-5 minutes)
+   - Builds Docker images in parallel
+   - Pushes to Docker Hub
+   - Uses layer caching for speed
+
+2. **Deploy Phase** (~2-3 minutes)
+   - Connects to Kubernetes cluster
+   - Applies Kustomize configurations
+   - Updates image tags dynamically
+   - Waits for rollout completion
+
+3. **Verify Phase**
+   - Checks deployment status
+   - Lists pods and services
+   - Shows ingress configuration
+
+## Manual Deployment
+
+If you need to deploy manually:
+
+```bash
+# Deploy backend
+kubectl apply -k k8s/backend/
+kubectl set image deployment/backend-api backend-api=khoanguyen2610/backend:latest -n backend
+
+# Deploy frontend
+kubectl apply -k k8s/frontend/
+kubectl set image deployment/frontend-app frontend-app=khoanguyen2610/frontend:latest -n frontend
+```
+
+## Troubleshooting
+
+### Deployment Fails
+
+The workflow automatically rolls back failed deployments. Check:
+```bash
+kubectl get pods -n backend
+kubectl get pods -n frontend
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+### KUBECONFIG Secret Issues
+
+Verify your kubeconfig is properly base64 encoded:
+```bash
+# Decode to verify
+echo "$KUBECONFIG_SECRET" | base64 -d
+
+# Should show valid kubeconfig YAML
+```
+
+### Image Pull Errors
+
+Ensure Docker Hub credentials are correct:
+```bash
+# Test locally
+docker login
+docker pull khoanguyen2610/backend:latest
+```
 
 ## Monitoring Deployments
 
 ### View Workflow Runs
 
-```bash
-# Using GitHub CLI
-gh run list
-gh run watch
+1. Go to Actions tab in GitHub
+2. Select the workflow
+3. View logs for each step
 
-# View specific run
-gh run view <run-id> --log
-```
-
-### Check Kubernetes Deployment
+### Check Kubernetes Status
 
 ```bash
-# Check Helm release
-helm list -n default
+# Backend
+kubectl get deployments -n backend
+kubectl get pods -n backend -w
+kubectl logs -n backend -l app=backend-api
 
-# Check deployments
-kubectl get deployments -n default
-kubectl get pods -n default
-
-# View logs
-kubectl logs -n default -l app=backend-api -f
+# Frontend
+kubectl get deployments -n frontend
+kubectl get pods -n frontend -w
+kubectl get ingress -n frontend
 ```
 
-### Rollback if Needed
+## Rollback
 
+### Automatic Rollback
+The workflow automatically rolls back failed deployments.
+
+### Manual Rollback
 ```bash
-# Manual rollback
-helm rollback devops-app -n default
+# Backend
+kubectl rollout undo deployment/backend-api -n backend
+kubectl rollout undo deployment/email-processor-consumer -n backend
 
-# Or to specific revision
-helm history devops-app -n default
-helm rollback devops-app <revision> -n default
+# Frontend
+kubectl rollout undo deployment/frontend-app -n frontend
 ```
 
-## Troubleshooting
+## Security Best Practices
 
-### Build Failures
+1. **Secrets Management**
+   - Never commit kubeconfig files
+   - Rotate secrets regularly
+   - Use minimal permissions
 
-**Issue:** Docker build fails
-```bash
-# Check build logs in GitHub Actions
-# Verify Dockerfile syntax locally:
-docker build -t test ./backend
-```
+2. **Docker Hub**
+   - Use access tokens instead of passwords
+   - Limit token scope to push/pull only
 
-**Issue:** Image push fails
-```bash
-# Verify Docker Hub credentials are correct
-# Check secret values in GitHub settings
-```
+3. **Kubernetes**
+   - Use RBAC with minimal permissions
+   - Enable audit logging
+   - Regular security updates
 
-### Deployment Failures
+## Performance Tips
 
-**Issue:** Helm deployment fails
-```bash
-# Check Helm chart validity
-helm lint k8s/personal/devops-app/
+1. **Docker Layer Caching**
+   - Already enabled via GitHub Actions cache
+   - Significantly speeds up builds
 
-# Preview what will be deployed
-helm template devops-app k8s/personal/devops-app/
-```
+2. **Parallel Builds**
+   - Three builds run simultaneously
+   - Reduces total build time
 
-**Issue:** Pods not starting
-```bash
-# Check pod logs in workflow or manually
-kubectl logs -n default -l app=backend-api
-kubectl describe pod -n default <pod-name>
-```
-
-### Authentication Issues
-
-**Issue:** Cannot connect to cluster
-```bash
-# Verify KUBECONFIG secret is correct
-# Test kubeconfig locally:
-kubectl cluster-info
-```
-
-**Issue:** Docker Hub rate limit
-```bash
-# Ensure DOCKER_USERNAME and DOCKER_PASSWORD are set
-# Consider using GitHub Container Registry instead
-```
-
-## Customization
-
-### Deploy to Different Namespace
-
-Edit `build-deploy.yml`:
-```yaml
-helm upgrade --install devops-app k8s/personal/devops-app/ \
-  --namespace production \  # Change namespace
-  --create-namespace \
-  ...
-```
-
-### Use Different Values File
-
-Edit `build-deploy.yml`:
-```yaml
-helm upgrade --install devops-app k8s/personal/devops-app/ \
-  --values k8s/personal/devops-app/values-prod.yaml \  # Add values file
-  --set backend.image.tag=${{ github.sha }} \
-  ...
-```
-
-### Add Notifications
-
-Add to `build-deploy.yml`:
-```yaml
-- name: Notify Slack
-  uses: slackapi/slack-github-action@v1
-  with:
-    payload: |
-      {
-        "text": "Deployment ${{ job.status }}"
-      }
-  env:
-    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-```
-
-## Best Practices
-
-1. ✅ **Use specific image tags** in production (not `latest`)
-2. ✅ **Test locally** before pushing: `helm template` and `helm lint`
-3. ✅ **Enable branch protection** on main/master
-4. ✅ **Require PR reviews** before merging
-5. ✅ **Monitor deployments** after pushing
-6. ✅ **Use environment protection** for production
-7. ✅ **Keep secrets secure** - never commit them
-
-## Migration from Legacy
-
-### Old (Manual kubectl)
-```yaml
-script:
-  - kubectl apply -f k8s/personal/backend-deployment.yaml
-  - kubectl apply -f k8s/personal/frontend-deployment.yaml
-  - kubectl apply -f k8s/personal/consumer-*.yaml
-```
-
-### New (Helm)
-```yaml
-script:
-  - helm upgrade --install devops-app k8s/personal/devops-app/
-```
-
-**Benefits:**
-- One command instead of many
-- Automatic rollback capability
-- Version tracking
-- Easier configuration management
+3. **Efficient Kustomize**
+   - Small, focused kustomizations
+   - Fast build and apply times
 
 ## Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Helm Documentation](https://helm.sh/docs/)
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [Docker Build Push Action](https://github.com/docker/build-push-action)
-
----
-
-**Workflows are ready to use!** Just add the required secrets and push your code. 🚀
-
+- [Kustomize Documentation](https://kustomize.io/)
+- [kubectl Reference](https://kubernetes.io/docs/reference/kubectl/)
+- [Docker Hub Documentation](https://docs.docker.com/docker-hub/)
