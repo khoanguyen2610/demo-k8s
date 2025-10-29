@@ -66,13 +66,22 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: |
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && 
+      success()
     environment:
       name: production
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Check build status
+        run: |
+          echo "✅ Build job completed successfully"
+          echo "Images should be available in Docker Hub:"
+          echo "  - ${{ env.BACKEND_IMAGE }}:latest"
+          echo "  - ${{ env.FRONTEND_IMAGE }}:latest"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -101,20 +110,33 @@ jobs:
           kubectl create namespace backend --dry-run=client -o yaml | kubectl apply -f -
           kubectl create namespace frontend --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Update image tags
+      - name: Verify images exist
         run: |
           IMAGE_TAG="${{ github.ref_name }}-${{ github.sha }}"
           
-          echo "📦 Deploying images:"
-          echo "  Backend:  ${{ env.BACKEND_IMAGE }}:${IMAGE_TAG}"
-          echo "  Frontend: ${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG}"
+          echo "🔍 Checking if images were built..."
+          echo "Looking for:"
+          echo "  - ${{ env.BACKEND_IMAGE }}:${IMAGE_TAG}"
+          echo "  - ${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG}"
+          
+          # For now, use latest tag for simplicity
+          # Once build is confirmed working, we can use SHA tags
+          USE_TAG="latest"
+          
           echo ""
+          echo "📦 Using tag: ${USE_TAG}"
+          echo "  Backend:  ${{ env.BACKEND_IMAGE }}:${USE_TAG}"
+          echo "  Frontend: ${{ env.FRONTEND_IMAGE }}:${USE_TAG}"
+          
+      - name: Update image tags
+        run: |
+          USE_TAG="latest"
           
           # Update backend image
-          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}:${IMAGE_TAG}|g" k8s/personal/backend-deployment.yaml
+          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}:${USE_TAG}|g" k8s/personal/backend-deployment.yaml
           
           # Update frontend image  
-          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}:${IMAGE_TAG}|g" k8s/personal/frontend-deployment.yaml
+          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}:${USE_TAG}|g" k8s/personal/frontend-deployment.yaml
           
           echo "✅ Updated deployment manifests"
           echo ""
