@@ -12,7 +12,6 @@ This directory contains GitHub Actions workflows for building, testing, and depl
 - `build-backend` - Build and push backend API Docker image
 - `build-consumer` - Build and push consumer workers Docker image
 - `build-frontend` - Build and push frontend Docker image
-- `test-backend` - Health check testing
 - `deploy-helm` - Deploy to Kubernetes using Helm (main/master only)
 - `rollback-on-failure` - Automatic rollback if deployment fails
 
@@ -20,7 +19,6 @@ This directory contains GitHub Actions workflows for building, testing, and depl
 - ✅ Parallel builds for faster CI/CD
 - ✅ Docker layer caching (GitHub Actions cache)
 - ✅ Automatic tagging (branch, SHA, latest)
-- ✅ Health check testing before deployment
 - ✅ Helm-based deployment
 - ✅ Automatic rollback on failure
 - ✅ Environment protection for production
