@@ -129,9 +129,7 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: [build-backend, build-consumer, build-frontend]
-    if: |
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
-      secrets.KUBECONFIG != ''
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     environment:
       name: production
       url: http://kn-tech.click
@@ -217,10 +215,7 @@ jobs:
     name: Rollback on Failure
     runs-on: ubuntu-latest
     needs: deploy-k8s
-    if: |
-      failure() && 
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
-      secrets.KUBECONFIG != ''
+    if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     steps:
       - name: Configure kubectl
         run: |
