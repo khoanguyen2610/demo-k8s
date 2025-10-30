@@ -7,7 +7,7 @@ function App() {
   const [error, setError] = useState(null);
   const [health, setHealth] = useState(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://api.kn-tech.click';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://local-api.kn-tech.click';
 
   // Fetch health status
   const fetchHealth = async () => {
