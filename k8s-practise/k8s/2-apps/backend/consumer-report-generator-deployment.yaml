@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-report-generator
+  namespace: production
+  labels:
+    app: consumer
+    task: report-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consumer
+      task: report-generator
+  template:
+    metadata:
+      labels:
+        app: consumer
+        task: report-generator
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: consumer
+          image: khoanguyen2610/backend-consumer:latest
+          args:
+            - "--task=report-generator"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+

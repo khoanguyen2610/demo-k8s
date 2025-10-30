@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Add current cluster
+  repositories: |
+    - url: https://github.com/khoanguyen2610/devops.git
+      name: devops
+  
+  # Enable auto-sync by default
+  application.instanceLabelKey: argocd.argoproj.io/instance
+  
+  # Timeout settings
+  timeout.reconciliation: 180s
+  timeout.hard.reconciliation: 0
+  
+  # Resource tracking
+  application.resourceTrackingMethod: annotation
+  
+  # Enable admin user
+  admin.enabled: "true"
+  
+  # URL for ArgoCD (update if using ingress)
+  url: https://localhost:8081
+
